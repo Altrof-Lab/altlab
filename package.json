@@ -1,0 +1,18 @@
+{
+  "name": "altlab",
+  "version": "0.1.0",
+  "private": true,
+  "description": "AltLab Ecosystem Monorepo (Core Backend & Dashboard Frontend)",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "concurrently -k -p \"[{name}]\" -c \"cyan.bold,green.bold\" \"npm run dev --workspace=apps/core\" \"npm run dev --workspace=apps/dashboard\"",
+    "build": "npm run build --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}
