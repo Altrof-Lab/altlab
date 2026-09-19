@@ -23,6 +23,44 @@ export interface ServerStatusDto {
 export type AffiliatePlatform = 'Facebook Ads' | 'Google Ads' | 'TikTok Ads' | 'Bing Ads' | 'Taboola' | 'Outbrain' | 'Custom Network';
 export type AccountStatus = 'active' | 'paused' | 'banned' | 'in_review';
 
+export interface StealthServiceResult {
+  serviceName: 'Browserleaks.net' | 'CreepJS' | 'Iphey' | 'Pixelscan' | 'Bot.sannysoft.com' | string;
+  statusCode: 'PASSED' | 'FAILED' | 'FLAGGED';
+  trustScore: number; // 0 - 100
+  failedParameters?: string[];
+}
+
+export interface StealthAuditVerdictDto {
+  processInstanceId: string;
+  status: 'RUNNING' | 'COMPLETED' | 'FAILED';
+  overallTrustScore: number; // 0 - 100
+  overallStatus: 'PASSED' | 'WARNING' | 'FAILED';
+  criticalFailureDetected: boolean;
+  results: StealthServiceResult[];
+  lastAuditedAt: string;
+}
+
+export interface CookieFarmStatusDto {
+  status: 'IDLE' | 'RUNNING' | 'COMPLETED' | 'FAILED';
+  cookiesCount: number;
+  sitesVisitedCount: number;
+  lastFarmedAt: string;
+}
+
+export interface BrowserProfileDto {
+  profileId: string;
+  name: string;
+  browserType: 'camoufox' | 'cloak' | 'chrome';
+  os: 'windows' | 'macos' | 'linux';
+  proxyIp?: string;
+  running: boolean;
+  linkedAccountId?: string;
+  linkedAccountName?: string;
+  stealthAudit?: StealthAuditVerdictDto;
+  cookieFarm?: CookieFarmStatusDto;
+  createdAt: string;
+}
+
 export interface AffiliateAccountDto {
   id: string;
   platform: AffiliatePlatform;
@@ -33,6 +71,9 @@ export interface AffiliateAccountDto {
   dailySpend: number;
   currency: string;
   proxyIp?: string;
+  browserProfileId?: string; // Optional binding to SpyHub browser profile
+  browserProfileName?: string;
+  stealthTrustScore?: number;
   createdAt: string;
 }
 
@@ -41,5 +82,6 @@ export interface CreateAffiliateAccountDto {
   accountName: string;
   accountId: string;
   proxyIp?: string;
+  browserProfileId?: string;
   currency: string;
 }

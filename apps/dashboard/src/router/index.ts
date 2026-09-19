@@ -14,6 +14,11 @@ const router = createRouter({
       name: 'affiliate-accounts',
       component: () => import('../views/affiliate/AccountsView.vue'),
     },
+    {
+      path: '/affiliate/browser-profiles',
+      name: 'browser-profiles',
+      component: () => import('../views/affiliate/BrowserProfilesView.vue'),
+    },
   ],
 });
 
