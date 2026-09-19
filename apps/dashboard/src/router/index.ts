@@ -9,6 +9,11 @@ const router = createRouter({
       name: 'home',
       component: HomeView,
     },
+    {
+      path: '/affiliate/accounts',
+      name: 'affiliate-accounts',
+      component: () => import('../views/affiliate/AccountsView.vue'),
+    },
   ],
 });
 
