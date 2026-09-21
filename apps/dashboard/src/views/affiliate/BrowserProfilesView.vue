@@ -137,7 +137,12 @@ const getAuditBadge = (audit?: BrowserProfileDto['stealthAudit']) => {
                   <span class="w-2 h-2 rounded-full" :class="profile.running ? 'bg-emerald-500 animate-pulse' : 'bg-gray-300'"></span>
                   <div>
                     <span class="font-semibold text-gray-900 dark:text-white block">{{ profile.name }}</span>
-                    <span class="text-[11px] text-gray-400 uppercase font-mono">{{ profile.browserType }} • {{ profile.os }}</span>
+                    <div class="flex items-center gap-1.5 mt-0.5">
+                      <span class="text-[11px] text-gray-400 uppercase font-mono">{{ profile.browserType }} • {{ profile.os }}</span>
+                      <span v-if="profile.nodeName" class="text-[10px] font-medium text-purple-700 bg-purple-50 dark:bg-purple-950 dark:text-purple-300 px-1.5 py-0.2 rounded">
+                        {{ profile.nodeName }}
+                      </span>
+                    </div>
                   </div>
                 </div>
               </td>

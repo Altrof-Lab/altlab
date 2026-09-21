@@ -1,12 +1,16 @@
 import { Injectable } from '@nestjs/common';
 import { BrowserProfileDto, StealthAuditVerdictDto } from '@altlab/shared';
 import { BotforgeClient } from '../../integrations/botforge/botforge.client';
+import { SpyhubClient } from '../../integrations/spyhub/spyhub.client';
 
 @Injectable()
 export class BrowserProfilesService {
-  constructor(private readonly botforgeClient: BotforgeClient) {}
+  constructor(
+    private readonly botforgeClient: BotforgeClient,
+    private readonly spyhubClient: SpyhubClient,
+  ) {}
 
-  private profiles: BrowserProfileDto[] = [
+  private fallbackProfiles: BrowserProfileDto[] = [
     {
       profileId: '9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d',
       name: 'Camoufox_US_FB_01',
@@ -14,6 +18,8 @@ export class BrowserProfilesService {
       os: 'windows',
       proxyIp: '185.220.101.45:8080',
       running: false,
+      nodeUrl: 'http://192.168.1.120:8000',
+      nodeName: 'Windows Node (192.168.1.120:8000)',
       linkedAccountId: 'acc-101',
       linkedAccountName: 'FB_Agency_US_01 (Facebook Ads)',
       stealthAudit: {
@@ -24,30 +30,10 @@ export class BrowserProfilesService {
         criticalFailureDetected: false,
         lastAuditedAt: '2026-09-19T22:15:00Z',
         results: [
-          {
-            serviceName: 'Browserleaks.net',
-            statusCode: 'PASSED',
-            trustScore: 100,
-            failedParameters: [],
-          },
-          {
-            serviceName: 'CreepJS',
-            statusCode: 'PASSED',
-            trustScore: 96,
-            failedParameters: [],
-          },
-          {
-            serviceName: 'Iphey',
-            statusCode: 'PASSED',
-            trustScore: 100,
-            failedParameters: [],
-          },
-          {
-            serviceName: 'Bot.sannysoft.com',
-            statusCode: 'PASSED',
-            trustScore: 98,
-            failedParameters: [],
-          },
+          { serviceName: 'Browserleaks.net', statusCode: 'PASSED', trustScore: 100, failedParameters: [] },
+          { serviceName: 'CreepJS', statusCode: 'PASSED', trustScore: 96, failedParameters: [] },
+          { serviceName: 'Iphey', statusCode: 'PASSED', trustScore: 100, failedParameters: [] },
+          { serviceName: 'Bot.sannysoft.com', statusCode: 'PASSED', trustScore: 98, failedParameters: [] },
         ],
       },
       cookieFarm: {
@@ -65,6 +51,8 @@ export class BrowserProfilesService {
       os: 'macos',
       proxyIp: '194.165.16.8:3128',
       running: true,
+      nodeUrl: 'http://localhost:8000',
+      nodeName: 'macOS Node (Local)',
       linkedAccountId: 'acc-102',
       linkedAccountName: 'G_Search_Crypto_EU (Google Ads)',
       stealthAudit: {
@@ -75,22 +63,9 @@ export class BrowserProfilesService {
         criticalFailureDetected: false,
         lastAuditedAt: '2026-09-19T20:00:00Z',
         results: [
-          {
-            serviceName: 'Browserleaks.net',
-            statusCode: 'PASSED',
-            trustScore: 100,
-          },
-          {
-            serviceName: 'CreepJS',
-            statusCode: 'PASSED',
-            trustScore: 90,
-          },
-          {
-            serviceName: 'Bot.sannysoft.com',
-            statusCode: 'FLAGGED',
-            trustScore: 85,
-            failedParameters: ['WebGL Unmasked Renderer Header'],
-          },
+          { serviceName: 'Browserleaks.net', statusCode: 'PASSED', trustScore: 100 },
+          { serviceName: 'CreepJS', statusCode: 'PASSED', trustScore: 90 },
+          { serviceName: 'Bot.sannysoft.com', statusCode: 'FLAGGED', trustScore: 85, failedParameters: ['WebGL Unmasked Renderer Header'] },
         ],
       },
       cookieFarm: {
@@ -101,71 +76,58 @@ export class BrowserProfilesService {
       },
       createdAt: '2026-09-05T12:00:00Z',
     },
-    {
-      profileId: '7f9a8b11-2233-4455-6677-8899aabbccdd',
-      name: 'Camoufox_TikTok_Nutra',
-      browserType: 'camoufox',
-      os: 'linux',
-      proxyIp: '45.142.122.90:8000',
-      running: false,
-      linkedAccountId: 'acc-103',
-      linkedAccountName: 'TT_Nutra_DE (TikTok Ads)',
-      stealthAudit: {
-        processInstanceId: 'bpmn-proc-9903',
-        status: 'COMPLETED',
-        overallTrustScore: 64,
-        overallStatus: 'WARNING',
-        criticalFailureDetected: true,
-        lastAuditedAt: '2026-09-19T14:10:00Z',
-        results: [
-          {
-            serviceName: 'Browserleaks.net',
-            statusCode: 'FAILED',
-            trustScore: 50,
-            failedParameters: ['WebRTC Local IP Leak'],
-          },
-          {
-            serviceName: 'Pixelscan',
-            statusCode: 'FLAGGED',
-            trustScore: 78,
-            failedParameters: ['Canvas Fingerprint Mismatch'],
-          },
-        ],
-      },
-      cookieFarm: {
-        status: 'IDLE',
-        cookiesCount: 56,
-        sitesVisitedCount: 12,
-        lastFarmedAt: '2026-09-12T10:00:00Z',
-      },
-      createdAt: '2026-09-12T09:00:00Z',
-    },
   ];
 
-  getProfiles(): BrowserProfileDto[] {
-    return this.profiles;
-  }
-
-  getProfileById(id: string): BrowserProfileDto | undefined {
-    return this.profiles.find((p) => p.profileId === id);
-  }
-
-  async fetchLiveBotforgeStealthCheck(profileId: string) {
+  /**
+   * Fetches and aggregates profiles across all configured SpyHub nodes (macOS + Windows).
+   */
+  async getProfiles(): Promise<BrowserProfileDto[]> {
     try {
-      return await this.botforgeClient.getStealthCheckResults(profileId);
+      const liveSpyhubProfiles = await this.spyhubClient.getAllProfiles();
+
+      if (liveSpyhubProfiles.length > 0) {
+        return liveSpyhubProfiles.map((p): BrowserProfileDto => {
+          // Check if proxy host & port exist
+          const proxyIp = p.proxy?.host ? `${p.proxy.host}:${p.proxy.port || 8080}` : undefined;
+
+          // Check if we have an existing audit/account binding in fallback
+          const existing = this.fallbackProfiles.find((f) => f.profileId === p.id);
+
+          return {
+            profileId: p.id,
+            name: p.name,
+            browserType: p.browser || 'camoufox',
+            os: p.os || 'windows',
+            proxyIp: proxyIp || existing?.proxyIp,
+            running: p.isRunning || p.is_running || false,
+            nodeUrl: p.nodeUrl,
+            nodeName: p.nodeName,
+            linkedAccountId: existing?.linkedAccountId,
+            linkedAccountName: existing?.linkedAccountName,
+            stealthAudit: existing?.stealthAudit,
+            cookieFarm: existing?.cookieFarm,
+            createdAt: p.createdAt || new Date().toISOString(),
+          };
+        });
+      }
     } catch (err) {
-      console.warn(`[BotForge API] Could not fetch live stealth check for profile ${profileId}. Using fallback data.`);
-      return null;
+      console.warn('[SpyHub Integration] Could not connect to SpyHub nodes. Using configured fallback profiles.');
     }
+
+    return this.fallbackProfiles;
+  }
+
+  async getProfileById(id: string): Promise<BrowserProfileDto | undefined> {
+    const all = await this.getProfiles();
+    return all.find((p) => p.profileId === id);
   }
 
   async startAudit(profileId: string): Promise<StealthAuditVerdictDto> {
-    const profile = this.getProfileById(profileId);
+    const profile = await this.getProfileById(profileId);
     if (!profile) {
       throw new Error('Profile not found');
     }
 
-    // Try starting audit via live BotforgeClient API
     try {
       const procStart = await this.botforgeClient.startFullStealthAudit(profileId);
       console.log(`[BotForge API] Started live stealth audit process: ${procStart.processInstanceId}`);
@@ -186,7 +148,12 @@ export class BrowserProfilesService {
         { serviceName: 'Iphey', statusCode: 'PASSED', trustScore: 100, failedParameters: [] },
       ],
     };
-    profile.stealthAudit = newVerdict;
+
+    const target = this.fallbackProfiles.find(p => p.profileId === profileId);
+    if (target) {
+      target.stealthAudit = newVerdict;
+    }
+
     return newVerdict;
   }
 }

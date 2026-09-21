@@ -50,10 +50,12 @@ export interface CookieFarmStatusDto {
 export interface BrowserProfileDto {
   profileId: string;
   name: string;
-  browserType: 'camoufox' | 'cloak' | 'chrome';
-  os: 'windows' | 'macos' | 'linux';
+  browserType: 'camoufox' | 'cloak' | 'chrome' | string;
+  os: 'windows' | 'macos' | 'linux' | string;
   proxyIp?: string;
   running: boolean;
+  nodeUrl?: string;
+  nodeName?: string;
   linkedAccountId?: string;
   linkedAccountName?: string;
   stealthAudit?: StealthAuditVerdictDto;

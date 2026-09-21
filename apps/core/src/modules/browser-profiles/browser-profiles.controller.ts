@@ -7,12 +7,12 @@ export class BrowserProfilesController {
   constructor(private readonly profilesService: BrowserProfilesService) {}
 
   @Get()
-  getProfiles(): BrowserProfileDto[] {
+  async getProfiles(): Promise<BrowserProfileDto[]> {
     return this.profilesService.getProfiles();
   }
 
   @Get(':id')
-  getProfileById(@Param('id') id: string): BrowserProfileDto | undefined {
+  async getProfileById(@Param('id') id: string): Promise<BrowserProfileDto | undefined> {
     return this.profilesService.getProfileById(id);
   }
 
