@@ -120,7 +120,7 @@ const getAuditBadge = (audit?: BrowserProfileDto['stealthAudit']) => {
               <th class="py-3 px-4">Stealth Audit (BotForge)</th>
               <th class="py-3 px-4">Cookie Farm</th>
               <th class="py-3 px-4">Linked Ad Account (AltLab)</th>
-              <th class="py-3 px-4">Proxy</th>
+              <th class="py-3 px-4">Proxy Status</th>
               <th class="py-3 px-4 text-right">Actions</th>
             </tr>
           </thead>
@@ -159,8 +159,15 @@ const getAuditBadge = (audit?: BrowserProfileDto['stealthAudit']) => {
                 </span>
                 <span v-else class="text-xs text-gray-400 italic">Unlinked</span>
               </td>
-              <td class="py-3.5 px-4 font-mono text-xs text-gray-400">
-                {{ profile.proxyIp || 'Direct' }}
+              <td class="py-3.5 px-4">
+                <!-- Green Proxied status badge in table -->
+                <span 
+                  class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold"
+                  :class="profile.proxyIp ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300' : 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400'"
+                >
+                  <span class="w-1.5 h-1.5 rounded-full" :class="profile.proxyIp ? 'bg-emerald-500' : 'bg-gray-400'"></span>
+                  {{ profile.proxyIp ? 'Proxied' : 'Direct' }}
+                </span>
               </td>
               <td class="py-3.5 px-4 text-right">
                 <div class="flex items-center justify-end gap-2">
@@ -188,7 +195,7 @@ const getAuditBadge = (audit?: BrowserProfileDto['stealthAudit']) => {
         <!-- Drawer Header -->
         <div class="px-6 py-4 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between">
           <div>
-            <span class="text-xs font-mono text-blue-600 uppercase font-semibold">Browser Profile Audit</span>
+            <span class="text-xs font-mono text-blue-600 uppercase font-semibold">Browser Profile Details & Audit</span>
             <h3 class="text-lg font-bold text-gray-900 dark:text-white">{{ selectedProfile.name }}</h3>
           </div>
           <button @click="showDrawer = false" class="p-2 text-gray-400 hover:text-gray-600 rounded-xl">✕</button>
@@ -196,6 +203,20 @@ const getAuditBadge = (audit?: BrowserProfileDto['stealthAudit']) => {
 
         <!-- Drawer Content Body -->
         <div class="flex-1 overflow-y-auto p-6 space-y-6">
+          <!-- Proxy Details Box in Drawer -->
+          <div class="bg-emerald-50/50 dark:bg-emerald-950/30 border border-emerald-100 dark:border-emerald-900/40 rounded-2xl p-4 flex items-center justify-between">
+            <div class="space-y-0.5">
+              <span class="text-xs font-semibold text-emerald-800 dark:text-emerald-300 uppercase tracking-wider block">Proxy Configuration</span>
+              <span class="font-mono text-xs font-bold text-gray-900 dark:text-gray-100">{{ selectedProfile.proxyIp || 'No proxy configured (Direct Connection)' }}</span>
+            </div>
+            <span 
+              class="px-2.5 py-1 rounded-full text-xs font-bold"
+              :class="selectedProfile.proxyIp ? 'bg-emerald-600 text-white' : 'bg-gray-200 text-gray-700'"
+            >
+              {{ selectedProfile.proxyIp ? 'ACTIVE PROXY' : 'DIRECT' }}
+            </span>
+          </div>
+
           <!-- Overall Trust Score Banner -->
           <div class="bg-gray-50 dark:bg-gray-950 border border-gray-200/80 dark:border-gray-800 rounded-2xl p-5 space-y-3">
             <div class="flex items-center justify-between">

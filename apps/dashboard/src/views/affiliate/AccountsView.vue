@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
-import type { AffiliateAccountDto, CreateAffiliateAccountDto, AffiliatePlatform } from '@altlab/shared';
+import type { AffiliateAccountDto, CreateAffiliateAccountDto } from '@altlab/shared';
 
 const accounts = ref<AffiliateAccountDto[]>([]);
 const loading = ref(true);
@@ -101,7 +101,7 @@ const getStatusBadge = (status: string) => {
     <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
       <div>
         <h2 class="text-2xl font-bold text-gray-900 dark:text-white tracking-tight">Affiliate Marketing Accounts</h2>
-        <p class="text-sm text-gray-500 dark:text-gray-400">Manage ad accounts, proxy IPs, balances, and daily spends</p>
+        <p class="text-sm text-gray-500 dark:text-gray-400">Manage ad accounts, balances, proxy status, and daily spends</p>
       </div>
 
       <button 
@@ -187,7 +187,7 @@ const getStatusBadge = (status: string) => {
               <th class="py-3 px-4">Status</th>
               <th class="py-3 px-4">Balance</th>
               <th class="py-3 px-4">Daily Spend</th>
-              <th class="py-3 px-4">Proxy IP</th>
+              <th class="py-3 px-4">Proxy</th>
               <th class="py-3 px-4 text-right">Actions</th>
             </tr>
           </thead>
@@ -214,8 +214,15 @@ const getStatusBadge = (status: string) => {
               <td class="py-3.5 px-4 font-medium text-blue-600 dark:text-blue-400">
                 ${{ acc.dailySpend.toLocaleString() }}/day
               </td>
-              <td class="py-3.5 px-4 font-mono text-xs text-gray-400">
-                {{ acc.proxyIp || 'Direct' }}
+              <td class="py-3.5 px-4">
+                <span 
+                  class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold"
+                  :class="acc.proxyIp ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300' : 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400'"
+                  :title="acc.proxyIp || 'Direct Connection'"
+                >
+                  <span class="w-1.5 h-1.5 rounded-full" :class="acc.proxyIp ? 'bg-emerald-500' : 'bg-gray-400'"></span>
+                  {{ acc.proxyIp ? 'Proxied' : 'Direct' }}
+                </span>
               </td>
               <td class="py-3.5 px-4 text-right">
                 <button class="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800">
