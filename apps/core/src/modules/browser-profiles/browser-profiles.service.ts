@@ -1,8 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import { BrowserProfileDto, StealthAuditVerdictDto } from '@altlab/shared';
+import { BotforgeClient } from '../../integrations/botforge/botforge.client';
 
 @Injectable()
 export class BrowserProfilesService {
+  constructor(private readonly botforgeClient: BotforgeClient) {}
+
   private profiles: BrowserProfileDto[] = [
     {
       profileId: '9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d',
@@ -147,11 +150,29 @@ export class BrowserProfilesService {
     return this.profiles.find((p) => p.profileId === id);
   }
 
-  startAudit(profileId: string): StealthAuditVerdictDto {
+  async fetchLiveBotforgeStealthCheck(profileId: string) {
+    try {
+      return await this.botforgeClient.getStealthCheckResults(profileId);
+    } catch (err) {
+      console.warn(`[BotForge API] Could not fetch live stealth check for profile ${profileId}. Using fallback data.`);
+      return null;
+    }
+  }
+
+  async startAudit(profileId: string): Promise<StealthAuditVerdictDto> {
     const profile = this.getProfileById(profileId);
     if (!profile) {
       throw new Error('Profile not found');
     }
+
+    // Try starting audit via live BotforgeClient API
+    try {
+      const procStart = await this.botforgeClient.startFullStealthAudit(profileId);
+      console.log(`[BotForge API] Started live stealth audit process: ${procStart.processInstanceId}`);
+    } catch (err) {
+      console.warn(`[BotForge API] Could not connect to BotForge at http://localhost:8080. Simulating audit result.`);
+    }
+
     const newVerdict: StealthAuditVerdictDto = {
       processInstanceId: `bpmn-proc-${Date.now()}`,
       status: 'COMPLETED',

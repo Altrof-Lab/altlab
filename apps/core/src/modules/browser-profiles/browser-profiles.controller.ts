@@ -17,7 +17,7 @@ export class BrowserProfilesController {
   }
 
   @Post(':id/audit')
-  startAudit(@Param('id') id: string): StealthAuditVerdictDto {
+  async startAudit(@Param('id') id: string): Promise<StealthAuditVerdictDto> {
     return this.profilesService.startAudit(id);
   }
 }
