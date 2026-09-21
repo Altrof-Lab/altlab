@@ -1,47 +1,83 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
-import type { BrowserProfileDto, SpyhubNodeStatusDto } from '@altlab/shared';
+import type { BrowserProfileDto, SpyhubNodeConfigDto, SingleNodeDataDto } from '@altlab/shared';
+
+interface ProgressiveNodeState {
+  nodeUrl: string;
+  nodeName: string;
+  os: 'macos' | 'windows' | 'linux' | string;
+  status: 'pending' | 'online' | 'offline';
+  responseTimeMs?: number;
+  profileCount?: number;
+}
 
 const profiles = ref<BrowserProfileDto[]>([]);
-const nodes = ref<SpyhubNodeStatusDto[]>([]);
+const nodeStates = ref<ProgressiveNodeState[]>([]);
 const loading = ref(true);
-const loadingNodes = ref(true);
 const selectedProfile = ref<BrowserProfileDto | null>(null);
 const showDrawer = ref(false);
 const auditingProfileId = ref<string | null>(null);
 
-const loadNodes = async () => {
-  loadingNodes.value = true;
+const loadNodesProgressively = async () => {
+  // 1. Fetch node configs immediately (<1ms) and render node cards in "Pending" state
   try {
-    const res = await fetch('/api/affiliate/browser-profiles/nodes');
-    if (res.ok) {
-      nodes.value = await res.json();
+    const configRes = await fetch('/api/affiliate/browser-profiles/nodes/config');
+    if (configRes.ok) {
+      const configs: SpyhubNodeConfigDto[] = await configRes.json();
+      nodeStates.value = configs.map(c => ({
+        nodeUrl: c.nodeUrl,
+        nodeName: c.nodeName,
+        os: c.os,
+        status: 'pending',
+      }));
     }
   } catch (err) {
-    console.error('Failed to load SpyHub nodes health:', err);
-  } finally {
-    loadingNodes.value = false;
+    console.error('Failed to load node configs:', err);
   }
-};
 
-const loadProfiles = async () => {
+  // Clear existing profiles and set initial table loading
+  profiles.value = [];
   loading.value = true;
-  try {
-    const res = await fetch('/api/affiliate/browser-profiles');
-    if (res.ok) {
-      profiles.value = await res.json();
-    }
-  } catch (err) {
-    console.error('Failed to load browser profiles:', err);
-  } finally {
+
+  if (nodeStates.value.length === 0) {
     loading.value = false;
+    return;
   }
+
+  // 2. Query each node independently in parallel (streamed resolution)
+  const tasks = nodeStates.value.map(async (node) => {
+    try {
+      const res = await fetch(`/api/affiliate/browser-profiles/node-data?nodeUrl=${encodeURIComponent(node.nodeUrl)}`);
+      if (res.ok) {
+        const data: SingleNodeDataDto = await res.json();
+
+        // Update node card immediately!
+        node.status = data.nodeStatus.status;
+        node.responseTimeMs = data.nodeStatus.responseTimeMs;
+        node.profileCount = data.nodeStatus.profileCount;
+
+        // Append node's profiles immediately!
+        if (data.profiles && data.profiles.length > 0) {
+          const existingIds = new Set(profiles.value.map(p => p.profileId));
+          const newItems = data.profiles.filter(p => !existingIds.has(p.profileId));
+          profiles.value = [...profiles.value, ...newItems];
+        }
+      }
+    } catch (err) {
+      node.status = 'offline';
+      node.profileCount = 0;
+    } finally {
+      // Hide table loading spinner as soon as ANY first node returns
+      loading.value = false;
+    }
+  });
+
+  await Promise.allSettled(tasks);
+  loading.value = false;
 };
 
 onMounted(() => {
-  // Trigger requests independently so profile data renders immediately without waiting for node health checks
-  loadProfiles();
-  loadNodes();
+  loadNodesProgressively();
 });
 
 const openDrawer = (profile: BrowserProfileDto) => {
@@ -54,7 +90,7 @@ const triggerAudit = async (profileId: string) => {
   try {
     const res = await fetch(`/api/affiliate/browser-profiles/${profileId}/audit`, { method: 'POST' });
     if (res.ok) {
-      await loadProfiles();
+      await loadNodesProgressively();
       if (selectedProfile.value && selectedProfile.value.profileId === profileId) {
         selectedProfile.value = profiles.value.find(p => p.profileId === profileId) || selectedProfile.value;
       }
@@ -98,24 +134,27 @@ const getAuditBadge = (audit?: BrowserProfileDto['stealthAudit']) => {
       </div>
     </div>
 
-    <!-- SpyHub Multi-Node Status Cards (New Request) -->
+    <!-- SpyHub Multi-Node Status Cards (Streamed & Reactive) -->
     <div class="space-y-2">
       <div class="flex items-center justify-between">
         <span class="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider">SpyHub Host Nodes Status</span>
-        <button @click="loadNodes()" class="text-xs text-blue-600 hover:underline">Refresh Nodes</button>
+        <button @click="loadNodesProgressively()" class="text-xs text-blue-600 hover:underline flex items-center gap-1">
+          <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+          Refresh Nodes
+        </button>
       </div>
 
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <!-- Node Card 1: macOS -->
+        <!-- Render node cards immediately in Pending state -->
         <div 
-          v-for="node in nodes" 
+          v-for="node in nodeStates" 
           :key="node.nodeUrl"
-          class="bg-white dark:bg-gray-950 border border-gray-100 dark:border-gray-800/80 rounded-2xl p-4 shadow-sm flex items-center justify-between"
+          class="bg-white dark:bg-gray-950 border border-gray-100 dark:border-gray-800/80 rounded-2xl p-4 shadow-sm flex items-center justify-between transition-all"
         >
           <div class="flex items-center gap-3">
             <div 
-              class="w-10 h-10 rounded-xl flex items-center justify-center font-bold text-lg"
-              :class="node.status === 'online' ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950 dark:text-emerald-400' : 'bg-red-50 text-red-600 dark:bg-red-950 dark:text-red-400'"
+              class="w-10 h-10 rounded-xl flex items-center justify-center font-bold text-lg transition-colors"
+              :class="node.status === 'online' ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950 dark:text-emerald-400' : node.status === 'offline' ? 'bg-red-50 text-red-600 dark:bg-red-950 dark:text-red-400' : 'bg-amber-50 text-amber-600 dark:bg-amber-950 dark:text-amber-400'"
             >
               <svg v-if="node.os === 'macos'" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
               <svg v-else class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 3h8v8H3V3zm10 0h8v8h-8V3zM3 13h8v8H3v-8zm10 0h8v8h-8v-8z"/></svg>
@@ -125,11 +164,12 @@ const getAuditBadge = (audit?: BrowserProfileDto['stealthAudit']) => {
               <div class="flex items-center gap-2">
                 <h4 class="font-bold text-sm text-gray-900 dark:text-white">{{ node.nodeName }}</h4>
                 <span 
-                  class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold"
-                  :class="node.status === 'online' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300' : 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300'"
+                  class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold transition-colors"
+                  :class="node.status === 'online' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300' : node.status === 'offline' ? 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300' : 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'"
                 >
-                  <span class="w-1.5 h-1.5 rounded-full" :class="node.status === 'online' ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'"></span>
-                  {{ node.status === 'online' ? 'Online' : 'Offline' }}
+                  <span v-if="node.status === 'pending'" class="w-2 h-2 border-2 border-amber-600 border-t-transparent rounded-full animate-spin"></span>
+                  <span v-else class="w-1.5 h-1.5 rounded-full" :class="node.status === 'online' ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'"></span>
+                  {{ node.status === 'online' ? 'Online' : node.status === 'offline' ? 'Offline' : 'Checking...' }}
                 </span>
               </div>
               <span class="font-mono text-xs text-gray-400 block">{{ node.nodeUrl }}</span>
@@ -137,9 +177,17 @@ const getAuditBadge = (audit?: BrowserProfileDto['stealthAudit']) => {
           </div>
 
           <div class="text-right text-xs">
-            <span class="font-bold text-gray-900 dark:text-white block">{{ node.profileCount }} Profiles</span>
-            <span v-if="node.status === 'online'" class="text-[11px] text-emerald-600 font-mono">{{ node.responseTimeMs }}ms</span>
-            <span v-else class="text-[11px] text-red-500 font-mono">1.5s Fast-Fail</span>
+            <template v-if="node.status === 'pending'">
+              <span class="text-amber-600 dark:text-amber-400 font-medium flex items-center justify-end gap-1 text-[11px]">
+                <svg class="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>
+                Pending...
+              </span>
+            </template>
+            <template v-else>
+              <span class="font-bold text-gray-900 dark:text-white block">{{ node.profileCount || 0 }} Profiles</span>
+              <span v-if="node.status === 'online'" class="text-[11px] text-emerald-600 font-mono">{{ node.responseTimeMs }}ms</span>
+              <span v-else class="text-[11px] text-red-500 font-mono">Fast-Fail</span>
+            </template>
           </div>
         </div>
       </div>

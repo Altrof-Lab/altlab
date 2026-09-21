@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { BrowserProfileDto, StealthAuditVerdictDto, SpyhubNodeStatusDto } from '@altlab/shared';
+import { BrowserProfileDto, StealthAuditVerdictDto, SpyhubNodeStatusDto, SpyhubNodeConfigDto, SingleNodeDataDto } from '@altlab/shared';
 import { BotforgeClient } from '../../integrations/botforge/botforge.client';
 import { SpyhubClient } from '../../integrations/spyhub/spyhub.client';
 
@@ -77,6 +77,53 @@ export class BrowserProfilesService {
       createdAt: '2026-09-05T12:00:00Z',
     },
   ];
+
+  /**
+   * Returns metadata for all configured SpyHub host nodes immediately (0ms wait).
+   */
+  getNodeConfigs(): SpyhubNodeConfigDto[] {
+    return this.spyhubClient.getNodeUrls().map((url) => {
+      const isLocal = url.includes('localhost') || url.includes('127.0.0.1');
+      return {
+        nodeUrl: url,
+        nodeName: isLocal ? 'SpyHub macOS (Local)' : `SpyHub Windows (${url.replace(/^https?:\/\//, '')})`,
+        os: isLocal ? 'macos' : 'windows',
+      };
+    });
+  }
+
+  /**
+   * Fetches status and profiles for a single specific SpyHub node URL.
+   */
+  async getNodeData(nodeUrl: string): Promise<SingleNodeDataDto> {
+    const res = await this.spyhubClient.getNodeData(nodeUrl);
+
+    const profiles = res.profiles.map((p): BrowserProfileDto => {
+      const proxyIp = p.proxy?.host ? `${p.proxy.host}:${p.proxy.port || 8080}` : undefined;
+      const existing = this.fallbackProfiles.find((f) => f.profileId === p.id);
+
+      return {
+        profileId: p.id,
+        name: p.name,
+        browserType: p.browser || 'camoufox',
+        os: p.os || 'windows',
+        proxyIp: proxyIp || existing?.proxyIp,
+        running: p.isRunning || p.is_running || false,
+        nodeUrl: p.nodeUrl,
+        nodeName: p.nodeName,
+        linkedAccountId: existing?.linkedAccountId,
+        linkedAccountName: existing?.linkedAccountName,
+        stealthAudit: existing?.stealthAudit,
+        cookieFarm: existing?.cookieFarm,
+        createdAt: p.createdAt || new Date().toISOString(),
+      };
+    });
+
+    return {
+      nodeStatus: res.status,
+      profiles,
+    };
+  }
 
   /**
    * Returns live node health statuses for all configured SpyHub nodes (macOS / Windows).

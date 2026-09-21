@@ -43,6 +43,53 @@ export class SpyhubClient {
   }
 
   /**
+   * Fetches health status AND profiles for a SINGLE target node URL.
+   */
+  async getNodeData(nodeUrl: string): Promise<{ status: SpyhubNodeStatus; profiles: AggregatedSpyhubProfile[] }> {
+    const start = Date.now();
+    const isLocal = nodeUrl.includes('localhost') || nodeUrl.includes('127.0.0.1');
+    const nodeName = isLocal ? 'SpyHub macOS (Local)' : `SpyHub Windows (${nodeUrl.replace(/^https?:\/\//, '')})`;
+    const os: 'macos' | 'windows' = isLocal ? 'macos' : 'windows';
+
+    try {
+      const items = await this.getProfilesFromNode(nodeUrl);
+      const responseTimeMs = Date.now() - start;
+      this.nodeStatusCache.set(nodeUrl, { isOnline: true, lastChecked: Date.now() });
+
+      const profiles: AggregatedSpyhubProfile[] = items.map((p) => ({
+        ...p,
+        nodeUrl,
+        nodeName: isLocal ? 'SpyHub macOS' : 'SpyHub Windows',
+        nodeStatus: 'online',
+      }));
+
+      return {
+        status: {
+          nodeUrl,
+          nodeName,
+          os,
+          status: 'online',
+          responseTimeMs,
+          profileCount: profiles.length,
+        },
+        profiles,
+      };
+    } catch (err) {
+      this.nodeStatusCache.set(nodeUrl, { isOnline: false, lastChecked: Date.now() });
+      return {
+        status: {
+          nodeUrl,
+          nodeName,
+          os,
+          status: 'offline',
+          profileCount: 0,
+        },
+        profiles: [],
+      };
+    }
+  }
+
+  /**
    * Checks health and latency for each configured SpyHub node.
    */
   async getNodeStatuses(): Promise<SpyhubNodeStatus[]> {

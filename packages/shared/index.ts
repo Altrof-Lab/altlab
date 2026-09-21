@@ -23,6 +23,12 @@ export interface ServerStatusDto {
 export type AffiliatePlatform = 'Facebook Ads' | 'Google Ads' | 'TikTok Ads' | 'Bing Ads' | 'Taboola' | 'Outbrain' | 'Custom Network';
 export type AccountStatus = 'active' | 'paused' | 'banned' | 'in_review';
 
+export interface SpyhubNodeConfigDto {
+  nodeUrl: string;
+  nodeName: string;
+  os: 'macos' | 'windows' | 'linux' | string;
+}
+
 export interface SpyhubNodeStatusDto {
   nodeUrl: string;
   nodeName: string;
@@ -30,6 +36,11 @@ export interface SpyhubNodeStatusDto {
   status: 'online' | 'offline';
   responseTimeMs?: number;
   profileCount: number;
+}
+
+export interface SingleNodeDataDto {
+  nodeStatus: SpyhubNodeStatusDto;
+  profiles: BrowserProfileDto[];
 }
 
 export interface StealthServiceResult {
