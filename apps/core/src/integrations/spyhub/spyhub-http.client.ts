@@ -4,10 +4,10 @@ import axios, { AxiosInstance } from 'axios';
  * Creates an isolated Axios HTTP Client instance for a specific SpyHub node.
  * Uses a fast-fail 1500ms timeout so offline nodes do not block UI queries.
  */
-export const createSpyhubHttpClient = (nodeUrl: string, customTimeoutMs: number = 1500): AxiosInstance => {
+export const createSpyhubHttpClient = (nodeUrl: string, customTimeoutMs: number = 800): AxiosInstance => {
   const instance = axios.create({
     baseURL: nodeUrl,
-    timeout: customTimeoutMs, // 1.5s fast-fail timeout
+    timeout: customTimeoutMs, // 800ms fast-fail timeout
     headers: {
       'Content-Type': 'application/json',
       'Accept': 'application/json',

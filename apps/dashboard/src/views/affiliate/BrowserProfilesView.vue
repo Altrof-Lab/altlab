@@ -39,8 +39,9 @@ const loadProfiles = async () => {
 };
 
 onMounted(() => {
-  // Fetch profiles and node health concurrently in parallel
-  Promise.all([loadNodes(), loadProfiles()]);
+  // Trigger requests independently so profile data renders immediately without waiting for node health checks
+  loadProfiles();
+  loadNodes();
 });
 
 const openDrawer = (profile: BrowserProfileDto) => {

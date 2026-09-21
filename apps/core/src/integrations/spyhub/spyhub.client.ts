@@ -8,6 +8,11 @@ import {
   SpyhubStartResponse
 } from './spyhub.types';
 
+interface CachedNodeStatus {
+  isOnline: boolean;
+  lastChecked: number;
+}
+
 /**
  * Declarative Multi-Node SpyHub API Client.
  * Aggregates browser profiles from multiple SpyHub nodes (e.g. macOS & Windows hosts).
@@ -15,6 +20,8 @@ import {
 @Injectable()
 export class SpyhubClient {
   private nodeUrls: string[];
+  private nodeStatusCache: Map<string, CachedNodeStatus> = new Map();
+  private readonly CACHE_TTL_MS = 10000; // 10 seconds offline cache TTL
 
   constructor() {
     // Read list of SpyHub URLs from env (comma-separated), e.g. "http://localhost:8000,http://192.168.1.120:8000"
@@ -27,10 +34,10 @@ export class SpyhubClient {
   }
 
   /**
-   * GET /profiles from a single SpyHub node with 1.5s fast-fail timeout
+   * GET /profiles from a single SpyHub node with 800ms fast-fail timeout
    */
   async getProfilesFromNode(nodeUrl: string): Promise<SpyhubProfile[]> {
-    const http = createSpyhubHttpClient(nodeUrl, 1500);
+    const http = createSpyhubHttpClient(nodeUrl, 800);
     const response = await http.get<SpyhubProfilesResponse>('/profiles');
     return response.data.items || [];
   }
@@ -49,6 +56,7 @@ export class SpyhubClient {
         try {
           const profiles = await this.getProfilesFromNode(nodeUrl);
           const responseTimeMs = Date.now() - start;
+          this.nodeStatusCache.set(nodeUrl, { isOnline: true, lastChecked: Date.now() });
           return {
             nodeUrl,
             nodeName,
@@ -58,6 +66,7 @@ export class SpyhubClient {
             profileCount: profiles.length,
           };
         } catch (err) {
+          this.nodeStatusCache.set(nodeUrl, { isOnline: false, lastChecked: Date.now() });
           return {
             nodeUrl,
             nodeName,
@@ -87,21 +96,36 @@ export class SpyhubClient {
 
   /**
    * Aggregates profiles from ALL configured SpyHub nodes concurrently.
-   * Handles offline nodes gracefully with 1.5s fast-fail timeout.
+   * If a node was detected offline within 10s TTL, skips waiting for socket timeout.
    */
   async getAllProfiles(): Promise<AggregatedSpyhubProfile[]> {
+    const now = Date.now();
+
     const results = await Promise.allSettled(
       this.nodeUrls.map(async (nodeUrl) => {
-        const items = await this.getProfilesFromNode(nodeUrl);
-        const isLocal = nodeUrl.includes('localhost') || nodeUrl.includes('127.0.0.1');
-        const nodeName = isLocal ? 'SpyHub macOS' : `SpyHub Windows`;
+        const cached = this.nodeStatusCache.get(nodeUrl);
+        // If node was confirmed offline less than 10 seconds ago, fail fast immediately (0ms wait)
+        if (cached && !cached.isOnline && (now - cached.lastChecked) < this.CACHE_TTL_MS) {
+          return [];
+        }
 
-        return items.map((profile): AggregatedSpyhubProfile => ({
-          ...profile,
-          nodeUrl,
-          nodeName,
-          nodeStatus: 'online',
-        }));
+        try {
+          const items = await this.getProfilesFromNode(nodeUrl);
+          const isLocal = nodeUrl.includes('localhost') || nodeUrl.includes('127.0.0.1');
+          const nodeName = isLocal ? 'SpyHub macOS' : `SpyHub Windows`;
+
+          this.nodeStatusCache.set(nodeUrl, { isOnline: true, lastChecked: now });
+
+          return items.map((profile): AggregatedSpyhubProfile => ({
+            ...profile,
+            nodeUrl,
+            nodeName,
+            nodeStatus: 'online',
+          }));
+        } catch (err) {
+          this.nodeStatusCache.set(nodeUrl, { isOnline: false, lastChecked: now });
+          return [];
+        }
       })
     );
 
