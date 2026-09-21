@@ -8,6 +8,8 @@ import {
   QuickCheckRequest 
 } from './botforge.types';
 
+import { ProfileSummaryDto } from '@altlab/shared';
+
 /**
  * Declarative BotForge API Client.
  * Handles HTTP requests to BotForge Spring Boot automation engine.
@@ -18,6 +20,20 @@ export class BotforgeClient {
 
   constructor() {
     this.http = createBotforgeHttpClient();
+  }
+
+  /**
+   * POST /api/v1/stealth-check/summary-info
+   * Returns bulk summary information (trust score, cookie count) for a list of profile IDs.
+   */
+  async getProfilesSummaryInfo(profileIds: string[]): Promise<ProfileSummaryDto[]> {
+    try {
+      const response = await this.http.post<ProfileSummaryDto[]>('/api/v1/stealth-check/summary-info', { profileIds });
+      return response.data || [];
+    } catch (err) {
+      console.warn('[BotForge API] Could not fetch live summary-info from BotForge. Returning empty summary.');
+      return [];
+    }
   }
 
   /**

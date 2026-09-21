@@ -43,6 +43,19 @@ export interface SingleNodeDataDto {
   profiles: BrowserProfileDto[];
 }
 
+export interface ProfileSummaryDto {
+  profileId: string;
+  overallTrustScore: number;
+  overallStatus: 'PASSED' | 'WARNING' | 'FAILED' | string;
+  cookiesCount: number;
+  sitesVisitedCount: number;
+  cookieFarmStatus: string;
+}
+
+export interface ProfileSummaryRequestDto {
+  profileIds: string[];
+}
+
 export interface StealthServiceResult {
   serviceName: 'Browserleaks.net' | 'CreepJS' | 'Iphey' | 'Pixelscan' | 'Bot.sannysoft.com' | string;
   statusCode: 'PASSED' | 'FAILED' | 'FLAGGED';

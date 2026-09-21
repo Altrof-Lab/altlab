@@ -94,13 +94,23 @@ export class BrowserProfilesService {
 
   /**
    * Fetches status and profiles for a single specific SpyHub node URL.
+   * Merges bulk summary metrics (trust scores, cookie count) from BotForge in 1 batch HTTP call.
    */
   async getNodeData(nodeUrl: string): Promise<SingleNodeDataDto> {
     const res = await this.spyhubClient.getNodeData(nodeUrl);
 
+    // 1. Collect all profile IDs from SpyHub
+    const profileIds = res.profiles.map(p => p.id);
+
+    // 2. Make 1 single bulk summary call to BotForge
+    const summaries = await this.botforgeClient.getProfilesSummaryInfo(profileIds);
+    const summaryMap = new Map(summaries.map(s => [s.profileId, s]));
+
+    // 3. Map SpyHub profiles with BotForge summary metrics
     const profiles = res.profiles.map((p): BrowserProfileDto => {
       const proxyIp = p.proxy?.host ? `${p.proxy.host}:${p.proxy.port || 8080}` : undefined;
       const existing = this.fallbackProfiles.find((f) => f.profileId === p.id);
+      const summary = summaryMap.get(p.id);
 
       return {
         profileId: p.id,
@@ -113,8 +123,21 @@ export class BrowserProfilesService {
         nodeName: p.nodeName,
         linkedAccountId: existing?.linkedAccountId,
         linkedAccountName: existing?.linkedAccountName,
-        stealthAudit: existing?.stealthAudit,
-        cookieFarm: existing?.cookieFarm,
+        stealthAudit: summary ? {
+          processInstanceId: existing?.stealthAudit?.processInstanceId || `bpmn-proc-${p.id.substring(0, 8)}`,
+          status: 'COMPLETED',
+          overallTrustScore: summary.overallTrustScore,
+          overallStatus: summary.overallStatus as any,
+          criticalFailureDetected: summary.overallStatus === 'FAILED',
+          lastAuditedAt: existing?.stealthAudit?.lastAuditedAt || new Date().toISOString(),
+          results: existing?.stealthAudit?.results || [],
+        } : existing?.stealthAudit,
+        cookieFarm: summary ? {
+          status: (summary.cookieFarmStatus as any) || 'COMPLETED',
+          cookiesCount: summary.cookiesCount,
+          sitesVisitedCount: summary.sitesVisitedCount,
+          lastFarmedAt: existing?.cookieFarm?.lastFarmedAt || new Date().toISOString(),
+        } : existing?.cookieFarm,
         createdAt: p.createdAt || new Date().toISOString(),
       };
     });
