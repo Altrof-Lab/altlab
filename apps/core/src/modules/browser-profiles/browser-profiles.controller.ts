@@ -1,6 +1,6 @@
 import { Controller, Get, Post, Param } from '@nestjs/common';
 import { BrowserProfilesService } from './browser-profiles.service';
-import { BrowserProfileDto, StealthAuditVerdictDto } from '@altlab/shared';
+import { BrowserProfileDto, StealthAuditVerdictDto, SpyhubNodeStatusDto } from '@altlab/shared';
 
 @Controller('affiliate/browser-profiles')
 export class BrowserProfilesController {
@@ -9,6 +9,11 @@ export class BrowserProfilesController {
   @Get()
   async getProfiles(): Promise<BrowserProfileDto[]> {
     return this.profilesService.getProfiles();
+  }
+
+  @Get('nodes')
+  async getNodeStatuses(): Promise<SpyhubNodeStatusDto[]> {
+    return this.profilesService.getNodeStatuses();
   }
 
   @Get(':id')

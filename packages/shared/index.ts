@@ -23,6 +23,15 @@ export interface ServerStatusDto {
 export type AffiliatePlatform = 'Facebook Ads' | 'Google Ads' | 'TikTok Ads' | 'Bing Ads' | 'Taboola' | 'Outbrain' | 'Custom Network';
 export type AccountStatus = 'active' | 'paused' | 'banned' | 'in_review';
 
+export interface SpyhubNodeStatusDto {
+  nodeUrl: string;
+  nodeName: string;
+  os: 'macos' | 'windows' | 'linux' | string;
+  status: 'online' | 'offline';
+  responseTimeMs?: number;
+  profileCount: number;
+}
+
 export interface StealthServiceResult {
   serviceName: 'Browserleaks.net' | 'CreepJS' | 'Iphey' | 'Pixelscan' | 'Bot.sannysoft.com' | string;
   statusCode: 'PASSED' | 'FAILED' | 'FLAGGED';
@@ -73,7 +82,7 @@ export interface AffiliateAccountDto {
   dailySpend: number;
   currency: string;
   proxyIp?: string;
-  browserProfileId?: string; // Optional binding to SpyHub browser profile
+  browserProfileId?: string;
   browserProfileName?: string;
   stealthTrustScore?: number;
   createdAt: string;

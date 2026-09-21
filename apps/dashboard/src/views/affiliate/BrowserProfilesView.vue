@@ -1,12 +1,28 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
-import type { BrowserProfileDto } from '@altlab/shared';
+import type { BrowserProfileDto, SpyhubNodeStatusDto } from '@altlab/shared';
 
 const profiles = ref<BrowserProfileDto[]>([]);
+const nodes = ref<SpyhubNodeStatusDto[]>([]);
 const loading = ref(true);
+const loadingNodes = ref(true);
 const selectedProfile = ref<BrowserProfileDto | null>(null);
 const showDrawer = ref(false);
 const auditingProfileId = ref<string | null>(null);
+
+const loadNodes = async () => {
+  loadingNodes.value = true;
+  try {
+    const res = await fetch('/api/affiliate/browser-profiles/nodes');
+    if (res.ok) {
+      nodes.value = await res.json();
+    }
+  } catch (err) {
+    console.error('Failed to load SpyHub nodes health:', err);
+  } finally {
+    loadingNodes.value = false;
+  }
+};
 
 const loadProfiles = async () => {
   loading.value = true;
@@ -22,7 +38,10 @@ const loadProfiles = async () => {
   }
 };
 
-onMounted(loadProfiles);
+onMounted(() => {
+  // Fetch profiles and node health concurrently in parallel
+  Promise.all([loadNodes(), loadProfiles()]);
+});
 
 const openDrawer = (profile: BrowserProfileDto) => {
   selectedProfile.value = profile;
@@ -74,7 +93,54 @@ const getAuditBadge = (audit?: BrowserProfileDto['stealthAudit']) => {
     <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
       <div>
         <h2 class="text-2xl font-bold text-gray-900 dark:text-white tracking-tight">SpyHub Browser Profiles & Stealth Audits</h2>
-        <p class="text-sm text-gray-500 dark:text-gray-400">Aggregated anti-detect browser profiles, BotForge stealth verdicts, and ad account bindings</p>
+        <p class="text-sm text-gray-500 dark:text-gray-400">Aggregated anti-detect browser profiles across host nodes (macOS & Windows)</p>
+      </div>
+    </div>
+
+    <!-- SpyHub Multi-Node Status Cards (New Request) -->
+    <div class="space-y-2">
+      <div class="flex items-center justify-between">
+        <span class="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider">SpyHub Host Nodes Status</span>
+        <button @click="loadNodes()" class="text-xs text-blue-600 hover:underline">Refresh Nodes</button>
+      </div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <!-- Node Card 1: macOS -->
+        <div 
+          v-for="node in nodes" 
+          :key="node.nodeUrl"
+          class="bg-white dark:bg-gray-950 border border-gray-100 dark:border-gray-800/80 rounded-2xl p-4 shadow-sm flex items-center justify-between"
+        >
+          <div class="flex items-center gap-3">
+            <div 
+              class="w-10 h-10 rounded-xl flex items-center justify-center font-bold text-lg"
+              :class="node.status === 'online' ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950 dark:text-emerald-400' : 'bg-red-50 text-red-600 dark:bg-red-950 dark:text-red-400'"
+            >
+              <svg v-if="node.os === 'macos'" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+              <svg v-else class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 3h8v8H3V3zm10 0h8v8h-8V3zM3 13h8v8H3v-8zm10 0h8v8h-8v-8z"/></svg>
+            </div>
+
+            <div>
+              <div class="flex items-center gap-2">
+                <h4 class="font-bold text-sm text-gray-900 dark:text-white">{{ node.nodeName }}</h4>
+                <span 
+                  class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold"
+                  :class="node.status === 'online' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300' : 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300'"
+                >
+                  <span class="w-1.5 h-1.5 rounded-full" :class="node.status === 'online' ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'"></span>
+                  {{ node.status === 'online' ? 'Online' : 'Offline' }}
+                </span>
+              </div>
+              <span class="font-mono text-xs text-gray-400 block">{{ node.nodeUrl }}</span>
+            </div>
+          </div>
+
+          <div class="text-right text-xs">
+            <span class="font-bold text-gray-900 dark:text-white block">{{ node.profileCount }} Profiles</span>
+            <span v-if="node.status === 'online'" class="text-[11px] text-emerald-600 font-mono">{{ node.responseTimeMs }}ms</span>
+            <span v-else class="text-[11px] text-red-500 font-mono">1.5s Fast-Fail</span>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -165,7 +231,6 @@ const getAuditBadge = (audit?: BrowserProfileDto['stealthAudit']) => {
                 <span v-else class="text-xs text-gray-400 italic">Unlinked</span>
               </td>
               <td class="py-3.5 px-4">
-                <!-- Green Proxied status badge in table -->
                 <span 
                   class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold"
                   :class="profile.proxyIp ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300' : 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400'"
@@ -219,6 +284,17 @@ const getAuditBadge = (audit?: BrowserProfileDto['stealthAudit']) => {
               :class="selectedProfile.proxyIp ? 'bg-emerald-600 text-white' : 'bg-gray-200 text-gray-700'"
             >
               {{ selectedProfile.proxyIp ? 'ACTIVE PROXY' : 'DIRECT' }}
+            </span>
+          </div>
+
+          <!-- Node Host Info in Drawer -->
+          <div class="bg-purple-50/50 dark:bg-purple-950/30 border border-purple-100 dark:border-purple-900/40 rounded-2xl p-4 flex items-center justify-between">
+            <div class="space-y-0.5">
+              <span class="text-xs font-semibold text-purple-800 dark:text-purple-300 uppercase tracking-wider block">SpyHub Host Node</span>
+              <span class="font-mono text-xs font-bold text-gray-900 dark:text-gray-100">{{ selectedProfile.nodeName }}</span>
+            </div>
+            <span class="font-mono text-xs text-purple-700 dark:text-purple-300 font-medium">
+              {{ selectedProfile.nodeUrl }}
             </span>
           </div>
 

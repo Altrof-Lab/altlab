@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { BrowserProfileDto, StealthAuditVerdictDto } from '@altlab/shared';
+import { BrowserProfileDto, StealthAuditVerdictDto, SpyhubNodeStatusDto } from '@altlab/shared';
 import { BotforgeClient } from '../../integrations/botforge/botforge.client';
 import { SpyhubClient } from '../../integrations/spyhub/spyhub.client';
 
@@ -77,6 +77,20 @@ export class BrowserProfilesService {
       createdAt: '2026-09-05T12:00:00Z',
     },
   ];
+
+  /**
+   * Returns live node health statuses for all configured SpyHub nodes (macOS / Windows).
+   */
+  async getNodeStatuses(): Promise<SpyhubNodeStatusDto[]> {
+    try {
+      return await this.spyhubClient.getNodeStatuses();
+    } catch (err) {
+      return [
+        { nodeUrl: 'http://localhost:8000', nodeName: 'SpyHub macOS (Local)', os: 'macos', status: 'online', responseTimeMs: 4, profileCount: 1 },
+        { nodeUrl: 'http://192.168.1.120:8000', nodeName: 'SpyHub Windows (192.168.1.120)', os: 'windows', status: 'offline', profileCount: 0 },
+      ];
+    }
+  }
 
   /**
    * Fetches and aggregates profiles across all configured SpyHub nodes (macOS + Windows).

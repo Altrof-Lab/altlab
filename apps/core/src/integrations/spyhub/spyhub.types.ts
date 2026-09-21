@@ -33,6 +33,15 @@ export interface AggregatedSpyhubProfile extends SpyhubProfile {
   nodeStatus: 'online' | 'offline';
 }
 
+export interface SpyhubNodeStatus {
+  nodeUrl: string;
+  nodeName: string;
+  os: 'macos' | 'windows' | 'linux' | string;
+  status: 'online' | 'offline';
+  responseTimeMs?: number;
+  profileCount: number;
+}
+
 export interface SpyhubStartResponse {
   ok?: boolean;
   status?: string;
