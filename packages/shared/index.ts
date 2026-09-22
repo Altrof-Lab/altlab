@@ -49,7 +49,6 @@ export interface ProfileSummaryDto {
   overallStatus: 'PASSED' | 'WARNING' | 'FAILED' | string;
   cookiesCount: number;
   sitesVisitedCount: number;
-  cookieFarmStatus: string;
 }
 
 export interface ProfileSummaryRequestDto {

@@ -133,7 +133,7 @@ export class BrowserProfilesService {
           results: existing?.stealthAudit?.results || [],
         } : existing?.stealthAudit,
         cookieFarm: summary ? {
-          status: (summary.cookieFarmStatus as any) || 'COMPLETED',
+          status: existing?.cookieFarm?.status || 'COMPLETED',
           cookiesCount: summary.cookiesCount,
           sitesVisitedCount: summary.sitesVisitedCount,
           lastFarmedAt: existing?.cookieFarm?.lastFarmedAt || new Date().toISOString(),
