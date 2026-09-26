@@ -123,7 +123,7 @@ export class BrowserProfilesService {
         nodeName: p.nodeName,
         linkedAccountId: existing?.linkedAccountId,
         linkedAccountName: existing?.linkedAccountName,
-        stealthAudit: summary ? {
+        stealthAudit: (summary && summary.overallStatus !== 'NOT_AUDITED') ? {
           processInstanceId: existing?.stealthAudit?.processInstanceId || `bpmn-proc-${p.id.substring(0, 8)}`,
           status: 'COMPLETED',
           overallTrustScore: summary.overallTrustScore,
@@ -131,7 +131,7 @@ export class BrowserProfilesService {
           criticalFailureDetected: summary.overallStatus === 'FAILED',
           lastAuditedAt: existing?.stealthAudit?.lastAuditedAt || new Date().toISOString(),
           results: existing?.stealthAudit?.results || [],
-        } : existing?.stealthAudit,
+        } : (existing?.stealthAudit?.results?.length ? existing.stealthAudit : undefined),
         cookieFarm: summary ? {
           status: existing?.cookieFarm?.status || 'COMPLETED',
           cookiesCount: summary.cookiesCount,
@@ -193,7 +193,7 @@ export class BrowserProfilesService {
             nodeName: p.nodeName,
             linkedAccountId: existing?.linkedAccountId,
             linkedAccountName: existing?.linkedAccountName,
-            stealthAudit: summary ? {
+            stealthAudit: (summary && summary.overallStatus !== 'NOT_AUDITED') ? {
               processInstanceId: existing?.stealthAudit?.processInstanceId || `bpmn-proc-${p.id.substring(0, 8)}`,
               status: 'COMPLETED',
               overallTrustScore: summary.overallTrustScore,
@@ -201,7 +201,7 @@ export class BrowserProfilesService {
               criticalFailureDetected: summary.overallStatus === 'FAILED',
               lastAuditedAt: existing?.stealthAudit?.lastAuditedAt || new Date().toISOString(),
               results: existing?.stealthAudit?.results || [],
-            } : existing?.stealthAudit,
+            } : (existing?.stealthAudit?.results?.length ? existing.stealthAudit : undefined),
             cookieFarm: summary ? {
               status: existing?.cookieFarm?.status || 'COMPLETED',
               cookiesCount: summary.cookiesCount,
@@ -337,6 +337,42 @@ export class BrowserProfilesService {
     };
 
     return defaultVerdict;
+  }
+
+  async startQuickAudit(profileId: string, services?: string[]): Promise<StealthAuditVerdictDto> {
+    const profile = await this.getProfileById(profileId);
+    if (!profile) {
+      throw new Error('Profile not found');
+    }
+
+    let procInstanceId = `bpmn-proc-${Date.now()}`;
+    try {
+      const procStart = await this.botforgeClient.startQuickStealthAudit(profileId, {
+        services,
+        enableEarlyTermination: false,
+      });
+      if (procStart?.processInstanceId) {
+        procInstanceId = procStart.processInstanceId;
+      }
+      console.log(`[BotForge API] Started quick stealth audit process for ${services?.join(', ')}: ${procInstanceId}`);
+    } catch (err) {
+      console.warn(`[BotForge API] Could not trigger quick stealth audit process on BotForge engine.`);
+    }
+
+    const updatedProfile = await this.getProfileById(profileId);
+    if (updatedProfile?.stealthAudit && updatedProfile.stealthAudit.results.length > 0) {
+      return updatedProfile.stealthAudit;
+    }
+
+    return {
+      processInstanceId: procInstanceId,
+      status: 'RUNNING',
+      overallTrustScore: profile.stealthAudit?.overallTrustScore || 0,
+      overallStatus: profile.stealthAudit?.overallStatus || 'WARNING',
+      criticalFailureDetected: false,
+      lastAuditedAt: new Date().toISOString(),
+      results: profile.stealthAudit?.results || [],
+    };
   }
 
   async startProfileInstance(profileId: string): Promise<{ success: boolean }> {

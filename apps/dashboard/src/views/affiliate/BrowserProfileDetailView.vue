@@ -2,6 +2,8 @@
 import { ref, computed, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import type { BrowserProfileDto } from '@altlab/shared';
+import { STEALTH_DIAGNOSTIC_RULES } from '../../config/stealth-rules';
+import { STEALTH_DIAGNOSTIC_RULES_RU } from '../../config/stealth-rules.ru';
 
 const route = useRoute();
 const router = useRouter();
@@ -137,20 +139,18 @@ const toggleAuditExpand = (auditId: string) => {
   expandedAudits.value[auditId] = !currentExpanded;
 };
 
-const isServiceExpanded = (auditId: string, serviceName: string, isValid: boolean) => {
+const isServiceExpanded = (auditId: string, serviceName: string) => {
   if (expandedServicesMap.value[auditId] && expandedServicesMap.value[auditId][serviceName] !== undefined) {
     return expandedServicesMap.value[auditId][serviceName];
   }
-  return isValid;
+  return false;
 };
 
 const toggleServiceExpand = (auditId: string, serviceName: string) => {
   if (!expandedServicesMap.value[auditId]) {
     expandedServicesMap.value[auditId] = {};
   }
-  const activeId = activeAudit.value?.auditId || 'active';
-  const isValid = auditId === activeId;
-  const currentExpanded = isServiceExpanded(auditId, serviceName, isValid);
+  const currentExpanded = isServiceExpanded(auditId, serviceName);
   expandedServicesMap.value[auditId][serviceName] = !currentExpanded;
 };
 
@@ -183,6 +183,178 @@ const getServiceStatusConfig = (res: { statusCode: string; trustScore: number })
     };
   }
 };
+
+// --- Single Service Rerun ---
+const triggeringService = ref<string | null>(null);
+
+const triggerSingleServiceRerun = async (serviceName: string) => {
+  actionLoading.value = true;
+  triggeringService.value = serviceName;
+  actionMessage.value = `Rerunning ${serviceName} stealth check (BotForge BPMN)...`;
+  try {
+    const res = await fetch(`/api/affiliate/browser-profiles/${profileId.value}/audit/quick`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ services: [serviceName] }),
+    });
+    if (res.ok) {
+      await loadProfile();
+      actionMessage.value = `${serviceName} audit updated successfully!`;
+      setTimeout(() => (actionMessage.value = null), 3000);
+    }
+  } catch (err) {
+    console.error(`Failed to rerun ${serviceName}:`, err);
+  } finally {
+    actionLoading.value = false;
+    triggeringService.value = null;
+  }
+};
+
+// --- Raw JSON Modal ---
+const selectedRawReport = ref<{ title: string; json: any } | null>(null);
+
+const openRawJsonModal = (serviceName: string, report: any) => {
+  selectedRawReport.value = {
+    title: `${serviceName} Raw Stealth Report Payload`,
+    json: report || { message: 'No detailed raw telemetry captured for this check.' },
+  };
+};
+
+const closeRawJsonModal = () => {
+  selectedRawReport.value = null;
+};
+
+// --- Threat Level Classification ---
+const categorizeFlaggedParameters = (params: string[]) => {
+  if (!params || params.length === 0) return { critical: [], fingerprint: [], network: [] };
+
+  const critical: string[] = [];
+  const fingerprint: string[] = [];
+  const network: string[] = [];
+
+  params.forEach((param) => {
+    const upper = param.toUpperCase();
+    if (
+      upper.includes('WEBDRIVER') ||
+      upper.includes('RECAPTCHA') ||
+      upper.includes('LEAKED') ||
+      upper.includes('FAILED') ||
+      upper.includes('MISMATCH:EXPECTED')
+    ) {
+      critical.push(param);
+    } else if (
+      upper.includes('MISMATCH') ||
+      upper.includes('CODECS') ||
+      upper.includes('FONTS') ||
+      upper.includes('CANVAS') ||
+      upper.includes('WEBGL') ||
+      upper.includes('KERNEL') ||
+      upper.includes('PLATFORM')
+    ) {
+      fingerprint.push(param);
+    } else {
+      network.push(param);
+    }
+  });
+
+  return { critical, fingerprint, network };
+};
+
+// --- Auto-Delta Diffing ---
+const getDeltaInfo = (param: string) => {
+  const active = activeAudit.value;
+  const previous = previousAudits.value[0];
+  if (!active || !previous) return null;
+
+  const prevParams: string[] = previous.results ? previous.results.flatMap((r) => r.failedParameters || []) : [];
+  const wasInPrevious = prevParams.includes(param);
+
+  if (!wasInPrevious) {
+    return { type: 'new', label: 'NEW ISSUE', class: 'bg-red-500 text-white dark:bg-red-600' };
+  }
+  return null;
+};
+
+const resolvedParametersInPreviousAudit = computed(() => {
+  const active = activeAudit.value;
+  const previous = previousAudits.value[0];
+  if (!active || !previous) return [];
+
+  const activeParams: string[] = active.results ? active.results.flatMap((r) => r.failedParameters || []) : [];
+  const previousParams: string[] = previous.results ? previous.results.flatMap((r) => r.failedParameters || []) : [];
+
+  return previousParams.filter((p) => !activeParams.includes(p));
+});
+
+// --- Compare Audits Modal ---
+const showCompareModal = ref(false);
+const compareAuditAId = ref<string>('');
+const compareAuditBId = ref<string>('');
+
+const openCompareModal = () => {
+  const list = auditList.value;
+  if (list.length >= 2) {
+    compareAuditAId.value = list[0].auditId || list[0].lastAuditedAt;
+    compareAuditBId.value = list[1].auditId || list[1].lastAuditedAt;
+  }
+  showCompareModal.value = true;
+};
+
+const auditA = computed(() => auditList.value.find((a) => (a.auditId || a.lastAuditedAt) === compareAuditAId.value) || null);
+const auditB = computed(() => auditList.value.find((a) => (a.auditId || a.lastAuditedAt) === compareAuditBId.value) || null);
+
+// --- Diagnostic Recommendations ---
+interface DiagnosticRecommendation {
+  id: string;
+  severity: 'critical' | 'warning' | 'info';
+  category: string;
+  title: string;
+  description: string;
+  actionHint: string;
+  triggeringParams: string[];
+}
+
+const currentRuleLang = ref<'ru' | 'en'>('ru');
+
+const activeRulesList = computed(() =>
+  currentRuleLang.value === 'ru' ? STEALTH_DIAGNOSTIC_RULES_RU : STEALTH_DIAGNOSTIC_RULES
+);
+
+const diagnosticRecommendations = computed<DiagnosticRecommendation[]>(() => {
+  const audit = activeAudit.value;
+  if (!audit || !audit.results) return [];
+
+  const allParams = audit.results.flatMap((r) => r.failedParameters || []);
+  if (allParams.length === 0) return [];
+
+  const recommendations: DiagnosticRecommendation[] = [];
+
+  for (const rule of activeRulesList.value) {
+    const matchedParams = allParams.filter((p) => rule.pattern.test(p));
+    if (matchedParams.length > 0) {
+      recommendations.push({
+        id: rule.id,
+        severity: rule.severity,
+        category: rule.category,
+        title: rule.title,
+        description: rule.description,
+        actionHint: rule.actionHint,
+        triggeringParams: matchedParams,
+      });
+    }
+  }
+
+  return recommendations;
+});
+
+const showRecommendations = ref(false);
+
+const criticalRecommendationsCount = computed(() =>
+  diagnosticRecommendations.value.filter((r) => r.severity === 'critical').length
+);
+const warningRecommendationsCount = computed(() =>
+  diagnosticRecommendations.value.filter((r) => r.severity === 'warning').length
+);
 </script>
 
 <template>
@@ -333,9 +505,21 @@ const getServiceStatusConfig = (res: { statusCode: string; trustScore: number })
                 <p class="text-xs text-gray-400">Individual Anti-Detect Diagnostics Breakdown</p>
               </div>
 
-              <span class="px-3 py-1 rounded-full text-xs font-bold" :class="getAuditBadge(activeAudit || undefined).class">
-                {{ activeAudit?.overallStatus || 'NOT AUDITED' }}
-              </span>
+              <div class="flex items-center gap-2">
+                <button 
+                  v-if="auditList.length >= 2"
+                  @click="openCompareModal()"
+                  type="button"
+                  class="px-3 py-1 bg-purple-50 hover:bg-purple-100 text-purple-700 dark:bg-purple-950 dark:hover:bg-purple-900 dark:text-purple-300 rounded-full text-xs font-bold transition-all flex items-center gap-1.5 border border-purple-200 dark:border-purple-900/60"
+                >
+                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"/></svg>
+                  <span>Diff Audits</span>
+                </button>
+
+                <span class="px-3 py-1 rounded-full text-xs font-bold" :class="getAuditBadge(activeAudit || undefined).class">
+                  {{ activeAudit?.overallStatus || 'NOT AUDITED' }}
+                </span>
+              </div>
             </div>
 
             <!-- Active / All Audits Grouped List -->
@@ -415,28 +599,101 @@ const getServiceStatusConfig = (res: { statusCode: string; trustScore: number })
                         </span>
                       </div>
 
-                      <button type="button" class="inline-flex items-center gap-1.5 text-xs font-semibold text-gray-500 hover:text-blue-600 dark:text-gray-400 dark:hover:text-blue-400">
-                        <span>{{ isServiceExpanded(activeAudit.auditId || 'active', res.serviceName, true) ? 'Collapse' : 'Expand' }}</span>
-                        <svg class="w-4 h-4 transition-transform duration-200" :class="{ 'rotate-180': isServiceExpanded(activeAudit.auditId || 'active', res.serviceName, true) }" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
-                      </button>
+                      <div class="flex items-center gap-2">
+                        <button 
+                          @click.stop="triggerSingleServiceRerun(res.serviceName)"
+                          :disabled="actionLoading"
+                          type="button" 
+                          class="px-2.5 py-1 bg-gray-100 hover:bg-blue-50 dark:bg-gray-800 dark:hover:bg-blue-950/40 text-gray-700 dark:text-gray-300 hover:text-blue-600 rounded-lg text-xs font-semibold flex items-center gap-1 transition-all disabled:opacity-50"
+                          title="Rerun stealth audit check for this service only"
+                        >
+                          <svg class="w-3.5 h-3.5" :class="{ 'animate-spin text-blue-600': triggeringService === res.serviceName }" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                          <span>Rerun Check</span>
+                        </button>
+
+                        <button type="button" class="inline-flex items-center gap-1.5 text-xs font-semibold text-gray-500 hover:text-blue-600 dark:text-gray-400 dark:hover:text-blue-400">
+                          <span>{{ isServiceExpanded(activeAudit.auditId || 'active', res.serviceName) ? 'Collapse' : 'Expand' }}</span>
+                          <svg class="w-4 h-4 transition-transform duration-200" :class="{ 'rotate-180': isServiceExpanded(activeAudit.auditId || 'active', res.serviceName) }" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+                        </button>
+                      </div>
                     </div>
 
                     <!-- Service Details -->
-                    <div v-if="isServiceExpanded(activeAudit.auditId || 'active', res.serviceName, true)" class="px-4 pb-4 pt-1 border-t border-gray-100 dark:border-gray-800/80 bg-gray-50/40 dark:bg-gray-950/60">
-                      <div v-if="res.failedParameters && res.failedParameters.length > 0" class="mt-2 space-y-2">
-                        <span class="text-xs font-bold text-red-600 dark:text-red-400 block uppercase tracking-wider">
-                          Flagged Parameters ({{ res.failedParameters.length }})
-                        </span>
-                        <div class="bg-red-50/70 dark:bg-red-950/40 border border-red-100 dark:border-red-900/50 rounded-xl p-3">
-                          <ul class="space-y-1.5">
-                            <li v-for="param in res.failedParameters" :key="param" class="text-xs font-mono text-red-700 dark:text-red-300 flex items-start gap-2 break-all">
-                              <span class="text-red-400 shrink-0">•</span>
-                              <span>{{ param }}</span>
-                            </li>
-                          </ul>
+                    <div v-if="isServiceExpanded(activeAudit.auditId || 'active', res.serviceName)" class="px-4 pb-4 pt-3 border-t border-gray-100 dark:border-gray-800/80 bg-gray-50/40 dark:bg-gray-950/60 space-y-3">
+                      <!-- Raw JSON Button -->
+                      <div class="flex items-center justify-between pb-1">
+                        <span class="text-xs font-bold text-gray-500 uppercase tracking-wider">Service Diagnostics</span>
+                        <button 
+                          @click="openRawJsonModal(res.serviceName, (res as any).report)"
+                          type="button"
+                          class="px-2.5 py-1 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 hover:border-purple-300 dark:hover:border-purple-800 text-purple-600 dark:text-purple-400 rounded-lg text-xs font-mono font-bold flex items-center gap-1.5 shadow-sm transition-all"
+                        >
+                          <span>{ } Raw JSON</span>
+                        </button>
+                      </div>
+
+                      <div v-if="res.failedParameters && res.failedParameters.length > 0" class="space-y-3">
+                        <!-- Categorized Threat Parameter Cards -->
+                        <div class="space-y-2">
+                          <!-- Critical Threat Parameters -->
+                          <div v-if="categorizeFlaggedParameters(res.failedParameters).critical.length > 0" class="bg-red-50/80 dark:bg-red-950/40 border border-red-200 dark:border-red-900/60 rounded-xl p-3 space-y-1.5">
+                            <div class="flex items-center gap-1.5 text-xs font-bold text-red-700 dark:text-red-300">
+                              <span class="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
+                              <span>Critical Threat Parameters ({{ categorizeFlaggedParameters(res.failedParameters).critical.length }})</span>
+                            </div>
+                            <ul class="space-y-1">
+                              <li v-for="param in categorizeFlaggedParameters(res.failedParameters).critical" :key="param" class="text-xs font-mono text-red-700 dark:text-red-300 flex items-center justify-between gap-2 break-all">
+                                <span class="flex items-start gap-1.5">
+                                  <span class="text-red-400 shrink-0">•</span>
+                                  <span>{{ param }}</span>
+                                </span>
+                                <span v-if="getDeltaInfo(param)" class="px-2 py-0.5 rounded text-[10px] font-extrabold uppercase shrink-0" :class="getDeltaInfo(param)?.class">
+                                  {{ getDeltaInfo(param)?.label }}
+                                </span>
+                              </li>
+                            </ul>
+                          </div>
+
+                          <!-- Fingerprint & OS Mismatches -->
+                          <div v-if="categorizeFlaggedParameters(res.failedParameters).fingerprint.length > 0" class="bg-amber-50/80 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/60 rounded-xl p-3 space-y-1.5">
+                            <div class="flex items-center gap-1.5 text-xs font-bold text-amber-800 dark:text-amber-300">
+                              <svg class="w-3.5 h-3.5 text-amber-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+                              <span>Fingerprint & OS Mismatches ({{ categorizeFlaggedParameters(res.failedParameters).fingerprint.length }})</span>
+                            </div>
+                            <ul class="space-y-1">
+                              <li v-for="param in categorizeFlaggedParameters(res.failedParameters).fingerprint" :key="param" class="text-xs font-mono text-amber-900 dark:text-amber-200 flex items-center justify-between gap-2 break-all">
+                                <span class="flex items-start gap-1.5">
+                                  <span class="text-amber-500 shrink-0">•</span>
+                                  <span>{{ param }}</span>
+                                </span>
+                                <span v-if="getDeltaInfo(param)" class="px-2 py-0.5 rounded text-[10px] font-extrabold uppercase shrink-0" :class="getDeltaInfo(param)?.class">
+                                  {{ getDeltaInfo(param)?.label }}
+                                </span>
+                              </li>
+                            </ul>
+                          </div>
+
+                          <!-- Network / IP Reputation Flags -->
+                          <div v-if="categorizeFlaggedParameters(res.failedParameters).network.length > 0" class="bg-blue-50/80 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900/60 rounded-xl p-3 space-y-1.5">
+                            <div class="flex items-center gap-1.5 text-xs font-bold text-blue-800 dark:text-blue-300">
+                              <svg class="w-3.5 h-3.5 text-blue-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                              <span>Network & IP Reputation Flags ({{ categorizeFlaggedParameters(res.failedParameters).network.length }})</span>
+                            </div>
+                            <ul class="space-y-1">
+                              <li v-for="param in categorizeFlaggedParameters(res.failedParameters).network" :key="param" class="text-xs font-mono text-blue-900 dark:text-blue-200 flex items-center justify-between gap-2 break-all">
+                                <span class="flex items-start gap-1.5">
+                                  <span class="text-blue-500 shrink-0">•</span>
+                                  <span>{{ param }}</span>
+                                </span>
+                                <span v-if="getDeltaInfo(param)" class="px-2 py-0.5 rounded text-[10px] font-extrabold uppercase shrink-0" :class="getDeltaInfo(param)?.class">
+                                  {{ getDeltaInfo(param)?.label }}
+                                </span>
+                              </li>
+                            </ul>
+                          </div>
                         </div>
                       </div>
-                      <div v-else class="mt-2 flex items-center gap-2 text-xs text-emerald-600 dark:text-emerald-400 font-medium">
+                      <div v-else class="flex items-center gap-2 text-xs text-emerald-600 dark:text-emerald-400 font-medium pt-1">
                         <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
                         <span>Clean fingerprint validation - all check parameters passed successfully.</span>
                       </div>
@@ -525,12 +782,12 @@ const getServiceStatusConfig = (res: { statusCode: string; trustScore: number })
                         </div>
 
                         <button type="button" class="inline-flex items-center gap-1 text-[11px] font-semibold text-gray-400 hover:text-blue-600">
-                          <span>{{ isServiceExpanded(audit.auditId || audit.lastAuditedAt, res.serviceName, false) ? 'Collapse' : 'Expand' }}</span>
-                          <svg class="w-3.5 h-3.5 transition-transform duration-200" :class="{ 'rotate-180': isServiceExpanded(audit.auditId || audit.lastAuditedAt, res.serviceName, false) }" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+                          <span>{{ isServiceExpanded(audit.auditId || audit.lastAuditedAt, res.serviceName) ? 'Collapse' : 'Expand' }}</span>
+                          <svg class="w-3.5 h-3.5 transition-transform duration-200" :class="{ 'rotate-180': isServiceExpanded(audit.auditId || audit.lastAuditedAt, res.serviceName) }" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
                         </button>
                       </div>
 
-                      <div v-if="isServiceExpanded(audit.auditId || audit.lastAuditedAt, res.serviceName, false)" class="px-3 pb-3 pt-1 border-t border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-950">
+                      <div v-if="isServiceExpanded(audit.auditId || audit.lastAuditedAt, res.serviceName)" class="px-3 pb-3 pt-1 border-t border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-950">
                         <div v-if="res.failedParameters && res.failedParameters.length > 0" class="mt-2 space-y-1.5">
                           <span class="text-[10px] font-bold text-red-600 dark:text-red-400 block uppercase tracking-wider">
                             Flagged Parameters ({{ res.failedParameters.length }})
@@ -559,6 +816,110 @@ const getServiceStatusConfig = (res: { statusCode: string; trustScore: number })
               No stealth audit reports run yet for this profile. Click "Run Stealth Audit" above to launch a BotForge BPMN scan.
             </div>
           </div>
+
+          <!-- Diagnostic Recommendations Card -->
+          <div v-if="diagnosticRecommendations.length > 0" class="bg-amber-50/40 dark:bg-amber-950/20 border border-amber-200/80 dark:border-amber-900/50 rounded-2xl p-5 shadow-sm space-y-3 transition-all duration-200">
+            <!-- Header Row -->
+            <div 
+              @click="showRecommendations = !showRecommendations" 
+              class="flex items-center justify-between cursor-pointer select-none"
+            >
+              <div class="flex items-center gap-2 text-amber-800 dark:text-amber-300 font-bold text-sm">
+                <svg class="w-5 h-5 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/></svg>
+                <span>BotForge Stealth Diagnostic Recommendations</span>
+
+                <div class="flex items-center gap-1.5 ml-2">
+                  <span v-if="criticalRecommendationsCount > 0" class="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300 border border-red-200 dark:border-red-900/60">
+                    {{ criticalRecommendationsCount }} Critical
+                  </span>
+                  <span v-if="warningRecommendationsCount > 0" class="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border border-amber-200 dark:border-amber-900/60">
+                    {{ warningRecommendationsCount }} Warning
+                  </span>
+                </div>
+              </div>
+
+              <button type="button" class="inline-flex items-center gap-1.5 text-xs font-semibold text-amber-800 dark:text-amber-300 hover:underline">
+                <span>{{ showRecommendations ? 'Collapse' : 'Expand Recommendations' }}</span>
+                <svg class="w-4 h-4 transition-transform duration-200" :class="{ 'rotate-180': showRecommendations }" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+              </button>
+            </div>
+
+            <!-- Recommendations Content (Visible only when Expanded) -->
+            <div v-if="showRecommendations" class="space-y-3 pt-2 border-t border-amber-200/60 dark:border-amber-900/40">
+              <!-- Top Toolbar inside Expanded block -->
+              <div class="flex items-center justify-between">
+                <span class="text-xs font-bold text-amber-900/80 dark:text-amber-200 uppercase tracking-wider">
+                  Diagnostic Action Plan
+                </span>
+
+                <!-- Language Switcher inside Expanded block -->
+                <div class="flex items-center gap-1 bg-amber-100/80 dark:bg-amber-950/80 p-0.5 rounded-lg border border-amber-200 dark:border-amber-900/60 text-[11px] font-bold">
+                  <button 
+                    @click="currentRuleLang = 'ru'" 
+                    :class="currentRuleLang === 'ru' ? 'bg-white dark:bg-amber-900 text-amber-900 dark:text-white shadow-xs' : 'text-amber-700 dark:text-amber-400 hover:text-amber-900'"
+                    class="px-2 py-0.5 rounded-md transition-all flex items-center gap-1"
+                  >
+                    <span>🇷🇺</span>
+                    <span>RU</span>
+                  </button>
+                  <button 
+                    @click="currentRuleLang = 'en'" 
+                    :class="currentRuleLang === 'en' ? 'bg-white dark:bg-amber-900 text-amber-900 dark:text-white shadow-xs' : 'text-amber-700 dark:text-amber-400 hover:text-amber-900'"
+                    class="px-2 py-0.5 rounded-md transition-all flex items-center gap-1"
+                  >
+                    <span>🇬🇧</span>
+                    <span>EN</span>
+                  </button>
+                </div>
+              </div>
+
+              <!-- Recommendations Grid -->
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div 
+                v-for="rec in diagnosticRecommendations" 
+                :key="rec.id" 
+                class="p-3.5 bg-white dark:bg-gray-950 border rounded-xl space-y-2 shadow-sm flex flex-col justify-between"
+                :class="rec.severity === 'critical' ? 'border-red-200 dark:border-red-900/60' : 'border-amber-200 dark:border-amber-900/60'"
+              >
+                <div class="space-y-1.5">
+                  <div class="flex items-center justify-between">
+                    <span class="text-xs font-bold text-gray-900 dark:text-white flex items-center gap-1.5">
+                      <span class="w-2 h-2 rounded-full" :class="rec.severity === 'critical' ? 'bg-red-500' : 'bg-amber-500'"></span>
+                      {{ rec.title }}
+                    </span>
+                    <span class="px-2 py-0.5 rounded text-[10px] font-extrabold uppercase" :class="rec.severity === 'critical' ? 'bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300' : 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300'">
+                      {{ rec.severity }}
+                    </span>
+                  </div>
+                  <p class="text-xs text-gray-600 dark:text-gray-300 leading-normal">{{ rec.description }}</p>
+                </div>
+
+                <div class="space-y-2 pt-1 border-t border-gray-100 dark:border-gray-800/80">
+                  <div class="space-y-1">
+                    <span class="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">
+                      Triggered by {{ rec.triggeringParams.length }} Parameter(s):
+                    </span>
+                    <div class="flex flex-wrap gap-1">
+                      <span 
+                        v-for="param in rec.triggeringParams" 
+                        :key="param" 
+                        class="px-2 py-0.5 bg-gray-100 dark:bg-gray-900 border border-gray-200 dark:border-gray-800 text-gray-700 dark:text-gray-300 font-mono text-[10px] rounded-md truncate max-w-full"
+                        :title="param"
+                      >
+                        {{ param }}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div class="text-[11px] font-semibold text-blue-600 dark:text-blue-400 flex items-center gap-1">
+                    <svg class="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"/></svg>
+                    <span>Recommended Action: {{ rec.actionHint }}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
 
           <!-- Cookie Farm Details Card -->
           <div class="bg-white dark:bg-gray-950 border border-gray-100 dark:border-gray-800/80 rounded-2xl p-6 shadow-sm space-y-4">
@@ -629,5 +990,110 @@ const getServiceStatusConfig = (res: { statusCode: string; trustScore: number })
         </div>
       </div>
     </template>
+
+    <!-- Raw JSON Modal -->
+    <div v-if="selectedRawReport" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+      <div class="bg-white dark:bg-gray-950 border border-gray-200 dark:border-gray-800 rounded-2xl shadow-2xl max-w-3xl w-full max-h-[85vh] flex flex-col overflow-hidden">
+        <div class="flex items-center justify-between p-4 border-b border-gray-100 dark:border-gray-800">
+          <h3 class="text-sm font-bold font-mono text-purple-600 dark:text-purple-400">{{ selectedRawReport.title }}</h3>
+          <button @click="closeRawJsonModal()" class="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 rounded-lg">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+          </button>
+        </div>
+        <div class="p-4 overflow-y-auto flex-1 bg-gray-950 text-gray-100 font-mono text-xs">
+          <pre class="whitespace-pre-wrap break-all">{{ JSON.stringify(selectedRawReport.json, null, 2) }}</pre>
+        </div>
+        <div class="p-3 border-t border-gray-100 dark:border-gray-800 flex justify-end">
+          <button @click="closeRawJsonModal()" class="px-4 py-2 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-xl text-xs font-bold">
+            Close Viewer
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Compare Audits Modal -->
+    <div v-if="showCompareModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+      <div class="bg-white dark:bg-gray-950 border border-gray-200 dark:border-gray-800 rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] flex flex-col overflow-hidden">
+        <div class="flex items-center justify-between p-4 border-b border-gray-100 dark:border-gray-800">
+          <div class="flex items-center gap-2">
+            <svg class="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"/></svg>
+            <h3 class="text-sm font-bold text-gray-900 dark:text-white">Side-by-Side Audit Run Comparison (Diff)</h3>
+          </div>
+          <button @click="showCompareModal = false" class="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 rounded-lg">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+          </button>
+        </div>
+
+        <div class="p-4 space-y-4 overflow-y-auto flex-1">
+          <!-- Audit Selection Controls -->
+          <div class="grid grid-cols-2 gap-4">
+            <div class="space-y-1">
+              <label class="text-xs font-bold text-gray-500 uppercase">Audit Run A (Base)</label>
+              <select v-model="compareAuditAId" class="w-full text-xs font-mono p-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl">
+                <option v-for="a in auditList" :key="a.auditId || a.lastAuditedAt" :value="a.auditId || a.lastAuditedAt">
+                  {{ a.valid ? '[ACTIVE]' : '[HISTORICAL]' }} ID: {{ a.auditId ? a.auditId.substring(0, 8) : 'RUN' }} - {{ a.overallTrustScore }}% {{ a.overallStatus }} ({{ new Date(a.lastAuditedAt).toLocaleTimeString() }})
+                </option>
+              </select>
+            </div>
+
+            <div class="space-y-1">
+              <label class="text-xs font-bold text-gray-500 uppercase">Audit Run B (Target)</label>
+              <select v-model="compareAuditBId" class="w-full text-xs font-mono p-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl">
+                <option v-for="a in auditList" :key="a.auditId || a.lastAuditedAt" :value="a.auditId || a.lastAuditedAt">
+                  {{ a.valid ? '[ACTIVE]' : '[HISTORICAL]' }} ID: {{ a.auditId ? a.auditId.substring(0, 8) : 'RUN' }} - {{ a.overallTrustScore }}% {{ a.overallStatus }} ({{ new Date(a.lastAuditedAt).toLocaleTimeString() }})
+                </option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Side-by-Side Results Grid -->
+          <div class="grid grid-cols-2 gap-4 pt-2">
+            <!-- Audit A Column -->
+            <div v-if="auditA" class="border border-gray-200 dark:border-gray-800 rounded-xl p-3 space-y-3 bg-gray-50/40 dark:bg-gray-900/30">
+              <div class="flex items-center justify-between pb-2 border-b border-gray-200 dark:border-gray-800">
+                <span class="text-xs font-bold text-gray-900 dark:text-white">Trust Score: {{ auditA.overallTrustScore }}%</span>
+                <span class="px-2 py-0.5 rounded text-[10px] font-bold" :class="getAuditBadge(auditA).class">{{ auditA.overallStatus }}</span>
+              </div>
+
+              <div v-for="res in auditA.results" :key="res.serviceName" class="p-2.5 bg-white dark:bg-gray-950 border border-gray-100 dark:border-gray-800 rounded-lg space-y-1">
+                <div class="flex items-center justify-between text-xs font-bold">
+                  <span>{{ res.serviceName }}</span>
+                  <span :class="getServiceStatusConfig(res).badgeClass" class="px-2 py-0.5 rounded text-[10px]">{{ getServiceStatusConfig(res).label }}</span>
+                </div>
+                <div v-if="res.failedParameters && res.failedParameters.length > 0" class="text-[11px] font-mono text-red-600 dark:text-red-400 space-y-0.5">
+                  <div v-for="p in res.failedParameters" :key="p" class="truncate">• {{ p }}</div>
+                </div>
+                <div v-else class="text-[10px] text-emerald-600 font-medium">Clean</div>
+              </div>
+            </div>
+
+            <!-- Audit B Column -->
+            <div v-if="auditB" class="border border-gray-200 dark:border-gray-800 rounded-xl p-3 space-y-3 bg-gray-50/40 dark:bg-gray-900/30">
+              <div class="flex items-center justify-between pb-2 border-b border-gray-200 dark:border-gray-800">
+                <span class="text-xs font-bold text-gray-900 dark:text-white">Trust Score: {{ auditB.overallTrustScore }}%</span>
+                <span class="px-2 py-0.5 rounded text-[10px] font-bold" :class="getAuditBadge(auditB).class">{{ auditB.overallStatus }}</span>
+              </div>
+
+              <div v-for="res in auditB.results" :key="res.serviceName" class="p-2.5 bg-white dark:bg-gray-950 border border-gray-100 dark:border-gray-800 rounded-lg space-y-1">
+                <div class="flex items-center justify-between text-xs font-bold">
+                  <span>{{ res.serviceName }}</span>
+                  <span :class="getServiceStatusConfig(res).badgeClass" class="px-2 py-0.5 rounded text-[10px]">{{ getServiceStatusConfig(res).label }}</span>
+                </div>
+                <div v-if="res.failedParameters && res.failedParameters.length > 0" class="text-[11px] font-mono text-red-600 dark:text-red-400 space-y-0.5">
+                  <div v-for="p in res.failedParameters" :key="p" class="truncate">• {{ p }}</div>
+                </div>
+                <div v-else class="text-[10px] text-emerald-600 font-medium">Clean</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="p-3 border-t border-gray-100 dark:border-gray-800 flex justify-end">
+          <button @click="showCompareModal = false" class="px-4 py-2 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-xl text-xs font-bold">
+            Close Comparison
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>

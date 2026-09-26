@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Param, Query } from '@nestjs/common';
+import { Controller, Get, Post, Param, Query, Body } from '@nestjs/common';
 import { BrowserProfilesService } from './browser-profiles.service';
 import { BrowserProfileDto, StealthAuditVerdictDto, SpyhubNodeStatusDto, SpyhubNodeConfigDto, SingleNodeDataDto } from '@altlab/shared';
 
@@ -34,6 +34,14 @@ export class BrowserProfilesController {
   @Post(':id/audit')
   async startAudit(@Param('id') id: string): Promise<StealthAuditVerdictDto> {
     return this.profilesService.startAudit(id);
+  }
+
+  @Post(':id/audit/quick')
+  async startQuickAudit(
+    @Param('id') id: string,
+    @Body('services') services?: string[],
+  ): Promise<StealthAuditVerdictDto> {
+    return this.profilesService.startQuickAudit(id, services);
   }
 
   @Post(':id/start')
