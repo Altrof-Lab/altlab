@@ -18,6 +18,11 @@ const selectedProfile = ref<BrowserProfileDto | null>(null);
 const showDrawer = ref(false);
 const auditingProfileId = ref<string | null>(null);
 
+const expandedDrawerServices = ref<Record<string, boolean>>({});
+const toggleDrawerServiceExpand = (serviceName: string) => {
+  expandedDrawerServices.value[serviceName] = !expandedDrawerServices.value[serviceName];
+};
+
 const loadNodesProgressively = async () => {
   // 1. Fetch node configs immediately (<1ms) and render node cards in "Pending" state
   try {
@@ -399,27 +404,80 @@ const getAuditBadge = (audit?: BrowserProfileDto['stealthAudit']) => {
           <div class="space-y-3">
             <h4 class="text-sm font-bold text-gray-900 dark:text-white uppercase tracking-wider">Stealth Check Verdicts (BotForge)</h4>
             
-            <div class="space-y-2">
+            <div class="space-y-2.5">
               <div 
                 v-for="res in selectedProfile.stealthAudit?.results || []" 
                 :key="res.serviceName"
-                class="border border-gray-100 dark:border-gray-800/80 bg-white dark:bg-gray-950 rounded-xl p-3.5 space-y-2"
+                class="border border-gray-100 dark:border-gray-800/80 bg-white dark:bg-gray-950 rounded-xl overflow-hidden transition-all duration-200"
               >
-                <div class="flex items-center justify-between text-xs">
-                  <span class="font-bold text-gray-900 dark:text-gray-100">{{ res.serviceName }}</span>
-                  <span 
-                    class="px-2 py-0.5 rounded-full font-bold text-[10px]"
-                    :class="res.statusCode === 'PASSED' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300' : 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300'"
+                <!-- Compact Header Row -->
+                <div 
+                  @click="toggleDrawerServiceExpand(res.serviceName)"
+                  class="flex items-center justify-between p-3 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-900/60 transition-colors select-none"
+                >
+                  <div class="flex items-center gap-2.5">
+                    <span 
+                      class="w-2.5 h-2.5 rounded-full shrink-0" 
+                      :class="res.statusCode === 'PASSED' ? 'bg-emerald-500' : res.statusCode === 'FLAGGED' ? 'bg-amber-500' : 'bg-red-500'"
+                    ></span>
+                    
+                    <span class="font-bold text-xs text-gray-900 dark:text-gray-100">{{ res.serviceName }}</span>
+
+                    <span 
+                      class="px-2 py-0.5 rounded-full font-bold text-[10px]"
+                      :class="res.statusCode === 'PASSED' 
+                        ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300' 
+                        : res.statusCode === 'FLAGGED'
+                        ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
+                        : 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300'"
+                    >
+                      {{ res.statusCode === 'PASSED' ? 'OK' : res.statusCode }} ({{ res.trustScore }}%)
+                    </span>
+                  </div>
+
+                  <button 
+                    type="button"
+                    class="inline-flex items-center gap-1 text-[11px] font-semibold text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
                   >
-                    {{ res.statusCode }} ({{ res.trustScore }}%)
-                  </span>
+                    <span>{{ expandedDrawerServices[res.serviceName] ? 'Collapse' : 'Expand' }}</span>
+                    <svg 
+                      class="w-3.5 h-3.5 transition-transform duration-200" 
+                      :class="{ 'rotate-180': expandedDrawerServices[res.serviceName] }"
+                      fill="none" 
+                      stroke="currentColor" 
+                      viewBox="0 0 24 24"
+                    >
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                    </svg>
+                  </button>
                 </div>
 
-                <div v-if="res.failedParameters && res.failedParameters.length > 0" class="text-xs text-red-600 bg-red-50 dark:bg-red-950/50 p-2 rounded-lg space-y-1">
-                  <span class="font-semibold block">Failed / Flagged Parameters:</span>
-                  <ul class="list-disc list-inside text-[11px]">
-                    <li v-for="param in res.failedParameters" :key="param">{{ param }}</li>
-                  </ul>
+                <!-- Collapsible Details -->
+                <div 
+                  v-if="expandedDrawerServices[res.serviceName]"
+                  class="px-3 pb-3 pt-1 border-t border-gray-100 dark:border-gray-800/80 bg-gray-50/50 dark:bg-gray-900/40"
+                >
+                  <div v-if="res.failedParameters && res.failedParameters.length > 0" class="mt-2 space-y-1.5">
+                    <span class="text-[10px] font-bold text-red-600 dark:text-red-400 block uppercase tracking-wider">
+                      Flagged Parameters ({{ res.failedParameters.length }})
+                    </span>
+                    <div class="bg-red-50/70 dark:bg-red-950/40 border border-red-100 dark:border-red-900/50 rounded-lg p-2.5">
+                      <ul class="space-y-1">
+                        <li 
+                          v-for="param in res.failedParameters" 
+                          :key="param"
+                          class="text-[11px] font-mono text-red-700 dark:text-red-300 flex items-start gap-1.5 break-all"
+                        >
+                          <span class="text-red-400 shrink-0">•</span>
+                          <span>{{ param }}</span>
+                        </li>
+                      </ul>
+                    </div>
+                  </div>
+                  <div v-else class="mt-2 flex items-center gap-1.5 text-[11px] text-emerald-600 dark:text-emerald-400 font-medium">
+                    <svg class="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+                    <span>Clean fingerprint validation</span>
+                  </div>
                 </div>
               </div>
             </div>
