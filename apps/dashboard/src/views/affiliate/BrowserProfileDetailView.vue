@@ -97,6 +97,29 @@ const expandedServices = ref<Record<string, boolean>>({});
 const toggleServiceExpand = (serviceName: string) => {
   expandedServices.value[serviceName] = !expandedServices.value[serviceName];
 };
+
+const getServiceStatusConfig = (res: { statusCode: string; trustScore: number }) => {
+  const code = (res.statusCode || '').toUpperCase();
+  if (code === 'PASSED' || code === 'OK' || res.trustScore === 100) {
+    return {
+      label: `OK (${res.trustScore}%)`,
+      badgeClass: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-200/60 dark:border-emerald-900/60',
+      type: 'success',
+    };
+  } else if (code === 'WARNING' || code === 'FLAGGED' || (res.trustScore > 0 && res.trustScore < 90)) {
+    return {
+      label: `${res.statusCode === 'FLAGGED' ? 'WARNING' : res.statusCode} (${res.trustScore}%)`,
+      badgeClass: 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border border-amber-200/60 dark:border-amber-900/60',
+      type: 'warning',
+    };
+  } else {
+    return {
+      label: `${res.statusCode || 'FAILED'} (${res.trustScore}%)`,
+      badgeClass: 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300 border border-red-200/60 dark:border-red-900/60',
+      type: 'failed',
+    };
+  }
+};
 </script>
 
 <template>
@@ -263,23 +286,31 @@ const toggleServiceExpand = (serviceName: string) => {
                   @click="toggleServiceExpand(res.serviceName)"
                   class="flex items-center justify-between p-3.5 cursor-pointer hover:bg-gray-100/60 dark:hover:bg-gray-800/60 transition-colors select-none"
                 >
-                  <div class="flex items-center gap-3">
-                    <span 
-                      class="w-2.5 h-2.5 rounded-full shrink-0" 
-                      :class="res.statusCode === 'PASSED' ? 'bg-emerald-500' : res.statusCode === 'FLAGGED' ? 'bg-amber-500' : 'bg-red-500'"
-                    ></span>
-                    
+                  <div class="flex items-center gap-2.5">
+                    <!-- Status Icon -->
+                    <template v-if="getServiceStatusConfig(res).type === 'success'">
+                      <svg class="w-4 h-4 text-emerald-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/>
+                      </svg>
+                    </template>
+                    <template v-else-if="getServiceStatusConfig(res).type === 'warning'">
+                      <svg class="w-4 h-4 text-amber-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                      </svg>
+                    </template>
+                    <template v-else>
+                      <svg class="w-4 h-4 text-red-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                      </svg>
+                    </template>
+
                     <span class="font-bold text-sm text-gray-900 dark:text-gray-100">{{ res.serviceName }}</span>
 
                     <span 
                       class="px-2.5 py-0.5 rounded-full font-bold text-xs"
-                      :class="res.statusCode === 'PASSED' 
-                        ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300' 
-                        : res.statusCode === 'FLAGGED'
-                        ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
-                        : 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300'"
+                      :class="getServiceStatusConfig(res).badgeClass"
                     >
-                      {{ res.statusCode === 'PASSED' ? 'OK' : res.statusCode }} ({{ res.trustScore }}%)
+                      {{ getServiceStatusConfig(res).label }}
                     </span>
                   </div>
 
