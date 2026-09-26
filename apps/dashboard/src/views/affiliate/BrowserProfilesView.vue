@@ -298,8 +298,14 @@ const getAuditBadge = (audit?: BrowserProfileDto['stealthAudit']) => {
                     {{ auditingProfileId === profile.profileId ? 'Auditing...' : 'Run Audit' }}
                   </button>
                   <button @click="openDrawer(profile)" class="px-2.5 py-1 text-xs font-semibold text-gray-600 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 rounded-lg transition-colors">
-                    Details
+                    Overview
                   </button>
+                  <router-link 
+                    :to="'/affiliate/browser-profiles/' + profile.profileId" 
+                    class="px-2.5 py-1 text-xs font-semibold text-blue-600 bg-blue-50 dark:bg-blue-950/60 hover:bg-blue-100 rounded-lg transition-colors"
+                  >
+                    Full View
+                  </router-link>
                 </div>
               </td>
             </tr>
@@ -314,10 +320,19 @@ const getAuditBadge = (audit?: BrowserProfileDto['stealthAudit']) => {
         <!-- Drawer Header -->
         <div class="px-6 py-4 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between">
           <div>
-            <span class="text-xs font-mono text-blue-600 uppercase font-semibold">Browser Profile Details & Audit</span>
+            <span class="text-xs font-mono text-blue-600 uppercase font-semibold">Browser Profile Overview</span>
             <h3 class="text-lg font-bold text-gray-900 dark:text-white">{{ selectedProfile.name }}</h3>
           </div>
-          <button @click="showDrawer = false" class="p-2 text-gray-400 hover:text-gray-600 rounded-xl">✕</button>
+
+          <div class="flex items-center gap-2">
+            <router-link 
+              :to="'/affiliate/browser-profiles/' + selectedProfile.profileId" 
+              class="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all"
+            >
+              Full Details Page ➔
+            </router-link>
+            <button @click="showDrawer = false" class="p-2 text-gray-400 hover:text-gray-600 rounded-xl">✕</button>
+          </div>
         </div>
 
         <!-- Drawer Content Body -->
@@ -425,7 +440,13 @@ const getAuditBadge = (audit?: BrowserProfileDto['stealthAudit']) => {
         </div>
 
         <!-- Drawer Footer -->
-        <div class="p-4 border-t border-gray-100 dark:border-gray-800 flex justify-end">
+        <div class="p-4 border-t border-gray-100 dark:border-gray-800 flex items-center justify-between">
+          <router-link 
+            :to="'/affiliate/browser-profiles/' + selectedProfile.profileId" 
+            class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all"
+          >
+            Full Details Page ➔
+          </router-link>
           <button @click="showDrawer = false" class="px-4 py-2 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-200 rounded-xl text-xs font-semibold">
             Close
           </button>

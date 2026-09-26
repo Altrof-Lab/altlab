@@ -35,4 +35,14 @@ export class BrowserProfilesController {
   async startAudit(@Param('id') id: string): Promise<StealthAuditVerdictDto> {
     return this.profilesService.startAudit(id);
   }
+
+  @Post(':id/start')
+  async startProfile(@Param('id') id: string) {
+    return this.profilesService.startProfileInstance(id);
+  }
+
+  @Post(':id/stop')
+  async stopProfile(@Param('id') id: string) {
+    return this.profilesService.stopProfileInstance(id);
+  }
 }

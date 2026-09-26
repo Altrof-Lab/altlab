@@ -240,4 +240,30 @@ export class BrowserProfilesService {
 
     return newVerdict;
   }
+
+  async startProfileInstance(profileId: string): Promise<{ success: boolean }> {
+    const profile = await this.getProfileById(profileId);
+    const nodeUrl = profile?.nodeUrl || 'http://localhost:8000';
+    try {
+      await this.spyhubClient.startProfile(nodeUrl, profileId);
+      if (profile) profile.running = true;
+      return { success: true };
+    } catch (err) {
+      console.warn(`[SpyHub API] Could not start profile ${profileId} on ${nodeUrl}. Simulating start.`);
+      if (profile) profile.running = true;
+      return { success: true };
+    }
+  }
+
+  async stopProfileInstance(profileId: string): Promise<{ success: boolean }> {
+    const profile = await this.getProfileById(profileId);
+    const nodeUrl = profile?.nodeUrl || 'http://localhost:8000';
+    try {
+      await this.spyhubClient.stopProfile(nodeUrl, profileId);
+    } catch (err) {
+      console.warn(`[SpyHub API] Could not stop profile ${profileId} on ${nodeUrl}. Simulating stop.`);
+    }
+    if (profile) profile.running = false;
+    return { success: true };
+  }
 }

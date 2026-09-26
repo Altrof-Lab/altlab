@@ -19,6 +19,11 @@ const router = createRouter({
       name: 'browser-profiles',
       component: () => import('../views/affiliate/BrowserProfilesView.vue'),
     },
+    {
+      path: '/affiliate/browser-profiles/:id',
+      name: 'browser-profile-detail',
+      component: () => import('../views/affiliate/BrowserProfileDetailView.vue'),
+    },
   ],
 });
 
