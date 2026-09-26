@@ -41,8 +41,13 @@ export class BotforgeClient {
    * Returns all valid browser stealth check reports & verdicts for a profile.
    */
   async getStealthCheckResults(profileId: string): Promise<BrowserStealthCheckResult[]> {
-    const response = await this.http.get<BrowserStealthCheckResult[]>(`/api/v1/stealth-check/${profileId}`);
-    return response.data;
+    try {
+      const response = await this.http.get<BrowserStealthCheckResult[]>(`/api/v1/stealth-check/${profileId}`);
+      return response.data || [];
+    } catch (err) {
+      console.warn(`[BotForge API] Could not fetch stealth check results for profile ${profileId}`);
+      return [];
+    }
   }
 
   /**

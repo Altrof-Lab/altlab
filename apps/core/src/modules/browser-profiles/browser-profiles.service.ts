@@ -165,17 +165,22 @@ export class BrowserProfilesService {
   /**
    * Fetches and aggregates profiles across all configured SpyHub nodes (macOS + Windows).
    */
+  /**
+   * Fetches and aggregates profiles across all configured SpyHub nodes (macOS + Windows).
+   */
   async getProfiles(): Promise<BrowserProfileDto[]> {
     try {
       const liveSpyhubProfiles = await this.spyhubClient.getAllProfiles();
 
       if (liveSpyhubProfiles.length > 0) {
-        return liveSpyhubProfiles.map((p): BrowserProfileDto => {
-          // Check if proxy host & port exist
-          const proxyIp = p.proxy?.host ? `${p.proxy.host}:${p.proxy.port || 8080}` : undefined;
+        const profileIds = liveSpyhubProfiles.map((p) => p.id);
+        const summaries = await this.botforgeClient.getProfilesSummaryInfo(profileIds);
+        const summaryMap = new Map(summaries.map((s) => [s.profileId, s]));
 
-          // Check if we have an existing audit/account binding in fallback
+        return liveSpyhubProfiles.map((p): BrowserProfileDto => {
+          const proxyIp = p.proxy?.host ? `${p.proxy.host}:${p.proxy.port || 8080}` : undefined;
           const existing = this.fallbackProfiles.find((f) => f.profileId === p.id);
+          const summary = summaryMap.get(p.id);
 
           return {
             profileId: p.id,
@@ -188,8 +193,21 @@ export class BrowserProfilesService {
             nodeName: p.nodeName,
             linkedAccountId: existing?.linkedAccountId,
             linkedAccountName: existing?.linkedAccountName,
-            stealthAudit: existing?.stealthAudit,
-            cookieFarm: existing?.cookieFarm,
+            stealthAudit: summary ? {
+              processInstanceId: existing?.stealthAudit?.processInstanceId || `bpmn-proc-${p.id.substring(0, 8)}`,
+              status: 'COMPLETED',
+              overallTrustScore: summary.overallTrustScore,
+              overallStatus: summary.overallStatus as any,
+              criticalFailureDetected: summary.overallStatus === 'FAILED',
+              lastAuditedAt: existing?.stealthAudit?.lastAuditedAt || new Date().toISOString(),
+              results: existing?.stealthAudit?.results || [],
+            } : existing?.stealthAudit,
+            cookieFarm: summary ? {
+              status: existing?.cookieFarm?.status || 'COMPLETED',
+              cookiesCount: summary.cookiesCount,
+              sitesVisitedCount: summary.sitesVisitedCount,
+              lastFarmedAt: existing?.cookieFarm?.lastFarmedAt || new Date().toISOString(),
+            } : existing?.cookieFarm,
             createdAt: p.createdAt || new Date().toISOString(),
           };
         });
@@ -203,7 +221,47 @@ export class BrowserProfilesService {
 
   async getProfileById(id: string): Promise<BrowserProfileDto | undefined> {
     const all = await this.getProfiles();
-    return all.find((p) => p.profileId === id);
+    const profile = all.find((p) => p.profileId === id);
+    if (!profile) return undefined;
+
+    try {
+      const stealthResults = await this.botforgeClient.getStealthCheckResults(id);
+      if (stealthResults && stealthResults.length > 0) {
+        const results = stealthResults.map((r) => ({
+          serviceName: r.service,
+          statusCode: (r.statusCode || 'PASSED') as any,
+          trustScore: r.trustScore ?? 100,
+          failedParameters: r.failedParameters || [],
+        }));
+
+        const latestTime = stealthResults.reduce((max, r) => {
+          const t = r.modifiedAt || r.createdAt;
+          return t && t > max ? t : max;
+        }, '');
+
+        const calculatedTrustScore = Math.round(
+          results.reduce((acc, r) => acc + (r.trustScore || 0), 0) / (results.length || 1)
+        );
+
+        const hasFailed = results.some((r) => r.statusCode === 'FAILED');
+        const hasFlagged = results.some((r) => r.statusCode === 'FLAGGED');
+        const calculatedStatus = hasFailed ? 'FAILED' : hasFlagged ? 'WARNING' : 'PASSED';
+
+        profile.stealthAudit = {
+          processInstanceId: profile.stealthAudit?.processInstanceId || `bpmn-proc-${id.substring(0, 8)}`,
+          status: 'COMPLETED',
+          overallTrustScore: profile.stealthAudit?.overallTrustScore ?? calculatedTrustScore,
+          overallStatus: (profile.stealthAudit?.overallStatus || calculatedStatus) as any,
+          criticalFailureDetected: (profile.stealthAudit?.overallStatus || calculatedStatus) === 'FAILED',
+          lastAuditedAt: latestTime || profile.stealthAudit?.lastAuditedAt || new Date().toISOString(),
+          results,
+        };
+      }
+    } catch (err) {
+      console.warn(`[BotForge API] Failed to fetch stealth audit results for profile ${id}:`, err);
+    }
+
+    return profile;
   }
 
   async startAudit(profileId: string): Promise<StealthAuditVerdictDto> {
@@ -212,33 +270,34 @@ export class BrowserProfilesService {
       throw new Error('Profile not found');
     }
 
+    let procInstanceId = `bpmn-proc-${Date.now()}`;
     try {
       const procStart = await this.botforgeClient.startFullStealthAudit(profileId);
-      console.log(`[BotForge API] Started live stealth audit process: ${procStart.processInstanceId}`);
+      if (procStart?.processInstanceId) {
+        procInstanceId = procStart.processInstanceId;
+      }
+      console.log(`[BotForge API] Started live stealth audit process: ${procInstanceId}`);
     } catch (err) {
-      console.warn(`[BotForge API] Could not connect to BotForge at http://localhost:8080. Simulating audit result.`);
+      console.warn(`[BotForge API] Could not trigger stealth audit process on BotForge engine.`);
     }
 
-    const newVerdict: StealthAuditVerdictDto = {
-      processInstanceId: `bpmn-proc-${Date.now()}`,
-      status: 'COMPLETED',
-      overallTrustScore: 99,
-      overallStatus: 'PASSED',
+    // Return updated profile stealthAudit if available
+    const updatedProfile = await this.getProfileById(profileId);
+    if (updatedProfile?.stealthAudit && updatedProfile.stealthAudit.results.length > 0) {
+      return updatedProfile.stealthAudit;
+    }
+
+    const defaultVerdict: StealthAuditVerdictDto = {
+      processInstanceId: procInstanceId,
+      status: 'RUNNING',
+      overallTrustScore: profile.stealthAudit?.overallTrustScore || 0,
+      overallStatus: profile.stealthAudit?.overallStatus || 'WARNING',
       criticalFailureDetected: false,
       lastAuditedAt: new Date().toISOString(),
-      results: [
-        { serviceName: 'Browserleaks.net', statusCode: 'PASSED', trustScore: 100, failedParameters: [] },
-        { serviceName: 'CreepJS', statusCode: 'PASSED', trustScore: 98, failedParameters: [] },
-        { serviceName: 'Iphey', statusCode: 'PASSED', trustScore: 100, failedParameters: [] },
-      ],
+      results: profile.stealthAudit?.results || [],
     };
 
-    const target = this.fallbackProfiles.find(p => p.profileId === profileId);
-    if (target) {
-      target.stealthAudit = newVerdict;
-    }
-
-    return newVerdict;
+    return defaultVerdict;
   }
 
   async startProfileInstance(profileId: string): Promise<{ success: boolean }> {

@@ -5,7 +5,7 @@ import axios, { AxiosInstance } from 'axios';
  */
 export const createBotforgeHttpClient = (baseURL?: string): AxiosInstance => {
   const instance = axios.create({
-    baseURL: baseURL || process.env.BOTFORGE_URL || 'http://localhost:8080',
+    baseURL: baseURL || process.env.BOTFORGE_URL || 'http://localhost:8037',
     timeout: 10000,
     headers: {
       'Content-Type': 'application/json',

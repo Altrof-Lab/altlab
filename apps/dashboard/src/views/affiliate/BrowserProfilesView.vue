@@ -80,9 +80,17 @@ onMounted(() => {
   loadNodesProgressively();
 });
 
-const openDrawer = (profile: BrowserProfileDto) => {
+const openDrawer = async (profile: BrowserProfileDto) => {
   selectedProfile.value = profile;
   showDrawer.value = true;
+  try {
+    const res = await fetch(`/api/affiliate/browser-profiles/${profile.profileId}`);
+    if (res.ok) {
+      selectedProfile.value = await res.json();
+    }
+  } catch (err) {
+    console.error('Failed to fetch detailed profile for drawer:', err);
+  }
 };
 
 const triggerAudit = async (profileId: string) => {

@@ -20,6 +20,9 @@ export interface BrowserStealthCheckResult {
   sessionId?: string;
   ipAddress?: string;
   service: string;
+  statusCode?: 'PASSED' | 'FAILED' | 'FLAGGED' | string;
+  trustScore?: number;
+  failedParameters?: string[];
   report?: StealthReport;
   verdict?: StealthValidationVerdict;
   valid: boolean;
