@@ -99,18 +99,28 @@ const expandedAudits = ref<Record<string, boolean>>({});
 const expandedServicesMap = ref<ServicesMap>({});
 const showPreviousAudits = ref(false);
 
-const activeAudit = computed(() => {
-  if (!profile.value) return null;
+const auditList = computed(() => {
+  if (!profile.value) return [];
   if (profile.value.stealthAuditHistory && profile.value.stealthAuditHistory.length > 0) {
-    return profile.value.stealthAuditHistory.find((h) => h.valid) || profile.value.stealthAuditHistory[0];
+    return profile.value.stealthAuditHistory;
   }
-  return profile.value.stealthAudit || null;
+  if (profile.value.stealthAudit && profile.value.stealthAudit.results && profile.value.stealthAudit.results.length > 0) {
+    return [profile.value.stealthAudit];
+  }
+  return [];
+});
+
+const activeAudit = computed(() => {
+  const list = auditList.value;
+  if (list.length === 0) return profile.value?.stealthAudit || null;
+  return list.find((h) => h.valid) || list[0];
 });
 
 const previousAudits = computed(() => {
-  if (!profile.value || !profile.value.stealthAuditHistory) return [];
+  const list = auditList.value;
   const active = activeAudit.value;
-  return profile.value.stealthAuditHistory.filter((h) => h.auditId !== active?.auditId && !h.valid);
+  if (!active) return [];
+  return list.filter((h) => (h.auditId ? h.auditId !== active.auditId : h !== active) && !h.valid);
 });
 
 const isAuditExpanded = (auditId: string, isValid: boolean) => {
@@ -329,7 +339,7 @@ const getServiceStatusConfig = (res: { statusCode: string; trustScore: number })
             </div>
 
             <!-- Active / All Audits Grouped List -->
-            <div v-if="profile.stealthAuditHistory && profile.stealthAuditHistory.length > 0" class="space-y-4">
+            <div v-if="auditList.length > 0" class="space-y-4">
               <!-- Active Audit Run Accordion Card -->
               <div 
                 v-if="activeAudit" 
