@@ -93,9 +93,62 @@ const getAuditBadge = (audit?: BrowserProfileDto['stealthAudit']) => {
     return { text: `${audit.overallTrustScore}% FAILED`, class: 'bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-300 border border-red-200 dark:border-red-900' };
   }
 };
-const expandedServices = ref<Record<string, boolean>>({});
-const toggleServiceExpand = (serviceName: string) => {
-  expandedServices.value[serviceName] = !expandedServices.value[serviceName];
+type ServicesMap = Record<string, Record<string, boolean>>;
+
+const expandedAudits = ref<Record<string, boolean>>({});
+const expandedServicesMap = ref<ServicesMap>({});
+const showPreviousAudits = ref(false);
+
+const activeAudit = computed(() => {
+  if (!profile.value) return null;
+  if (profile.value.stealthAuditHistory && profile.value.stealthAuditHistory.length > 0) {
+    return profile.value.stealthAuditHistory.find((h) => h.valid) || profile.value.stealthAuditHistory[0];
+  }
+  return profile.value.stealthAudit || null;
+});
+
+const previousAudits = computed(() => {
+  if (!profile.value || !profile.value.stealthAuditHistory) return [];
+  const active = activeAudit.value;
+  return profile.value.stealthAuditHistory.filter((h) => h.auditId !== active?.auditId && !h.valid);
+});
+
+const isAuditExpanded = (auditId: string, isValid: boolean) => {
+  if (expandedAudits.value[auditId] !== undefined) {
+    return expandedAudits.value[auditId];
+  }
+  return isValid && !showPreviousAudits.value;
+};
+
+const toggleAuditExpand = (auditId: string) => {
+  const activeId = activeAudit.value?.auditId || 'active';
+  const isValid = auditId === activeId;
+  const currentExpanded = isAuditExpanded(auditId, isValid);
+  expandedAudits.value[auditId] = !currentExpanded;
+};
+
+const isServiceExpanded = (auditId: string, serviceName: string, isValid: boolean) => {
+  if (expandedServicesMap.value[auditId] && expandedServicesMap.value[auditId][serviceName] !== undefined) {
+    return expandedServicesMap.value[auditId][serviceName];
+  }
+  return isValid;
+};
+
+const toggleServiceExpand = (auditId: string, serviceName: string) => {
+  if (!expandedServicesMap.value[auditId]) {
+    expandedServicesMap.value[auditId] = {};
+  }
+  const activeId = activeAudit.value?.auditId || 'active';
+  const isValid = auditId === activeId;
+  const currentExpanded = isServiceExpanded(auditId, serviceName, isValid);
+  expandedServicesMap.value[auditId][serviceName] = !currentExpanded;
+};
+
+const togglePreviousAudits = () => {
+  showPreviousAudits.value = !showPreviousAudits.value;
+  if (showPreviousAudits.value && activeAudit.value?.auditId) {
+    expandedAudits.value[activeAudit.value.auditId] = false;
+  }
 };
 
 const getServiceStatusConfig = (res: { statusCode: string; trustScore: number }) => {
@@ -270,92 +323,223 @@ const getServiceStatusConfig = (res: { statusCode: string; trustScore: number })
                 <p class="text-xs text-gray-400">Individual Anti-Detect Diagnostics Breakdown</p>
               </div>
 
-              <span class="px-3 py-1 rounded-full text-xs font-bold" :class="getAuditBadge(profile.stealthAudit).class">
-                {{ profile.stealthAudit?.overallStatus || 'NOT AUDITED' }}
+              <span class="px-3 py-1 rounded-full text-xs font-bold" :class="getAuditBadge(activeAudit || undefined).class">
+                {{ activeAudit?.overallStatus || 'NOT AUDITED' }}
               </span>
             </div>
 
-            <div v-if="profile.stealthAudit?.results && profile.stealthAudit.results.length > 0" class="space-y-2.5">
+            <!-- Active / All Audits Grouped List -->
+            <div v-if="profile.stealthAuditHistory && profile.stealthAuditHistory.length > 0" class="space-y-4">
+              <!-- Active Audit Run Accordion Card -->
               <div 
-                v-for="res in profile.stealthAudit.results" 
-                :key="res.serviceName"
-                class="border border-gray-100 dark:border-gray-800/80 bg-gray-50/50 dark:bg-gray-900/50 rounded-xl overflow-hidden transition-all duration-200"
+                v-if="activeAudit" 
+                class="border border-blue-100 dark:border-blue-900/50 bg-blue-50/20 dark:bg-blue-950/10 rounded-2xl overflow-hidden transition-all duration-200"
               >
-                <!-- Compact Header Row -->
+                <!-- Active Audit Run Header -->
                 <div 
-                  @click="toggleServiceExpand(res.serviceName)"
-                  class="flex items-center justify-between p-3.5 cursor-pointer hover:bg-gray-100/60 dark:hover:bg-gray-800/60 transition-colors select-none"
+                  @click="toggleAuditExpand(activeAudit.auditId || 'active')"
+                  class="flex items-center justify-between p-4 cursor-pointer hover:bg-blue-50/40 dark:hover:bg-blue-950/20 transition-colors border-b border-blue-100/60 dark:border-blue-900/40"
                 >
-                  <div class="flex items-center gap-2.5">
-                    <!-- Status Icon -->
-                    <template v-if="getServiceStatusConfig(res).type === 'success'">
-                      <svg class="w-4 h-4 text-emerald-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/>
-                      </svg>
-                    </template>
-                    <template v-else-if="getServiceStatusConfig(res).type === 'warning'">
-                      <svg class="w-4 h-4 text-amber-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
-                      </svg>
-                    </template>
-                    <template v-else>
-                      <svg class="w-4 h-4 text-red-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                      </svg>
-                    </template>
-
-                    <span class="font-bold text-sm text-gray-900 dark:text-gray-100">{{ res.serviceName }}</span>
-
-                    <span 
-                      class="px-2.5 py-0.5 rounded-full font-bold text-xs"
-                      :class="getServiceStatusConfig(res).badgeClass"
-                    >
-                      {{ getServiceStatusConfig(res).label }}
+                  <div class="flex items-center gap-3">
+                    <span class="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-blue-600 text-white uppercase tracking-wider">
+                      Active Audit Run
+                    </span>
+                    <span class="font-mono text-xs font-bold text-gray-700 dark:text-gray-300">
+                      ID: {{ activeAudit.auditId ? activeAudit.auditId.substring(0, 8) + '...' : 'CURRENT' }}
+                    </span>
+                    <span class="text-xs text-gray-400">
+                      {{ new Date(activeAudit.lastAuditedAt).toLocaleString() }}
                     </span>
                   </div>
 
-                  <button 
-                    type="button"
-                    class="inline-flex items-center gap-1.5 text-xs font-semibold text-gray-500 hover:text-blue-600 dark:text-gray-400 dark:hover:text-blue-400 transition-colors"
-                  >
-                    <span>{{ expandedServices[res.serviceName] ? 'Collapse' : 'Expand' }}</span>
-                    <svg 
-                      class="w-4 h-4 transition-transform duration-200" 
-                      :class="{ 'rotate-180': expandedServices[res.serviceName] }"
-                      fill="none" 
-                      stroke="currentColor" 
-                      viewBox="0 0 24 24"
+                  <div class="flex items-center gap-3">
+                    <span class="px-2.5 py-0.5 rounded-full font-bold text-xs" :class="getAuditBadge(activeAudit).class">
+                      {{ activeAudit.overallTrustScore }}% {{ activeAudit.overallStatus }}
+                    </span>
+
+                    <button 
+                      type="button" 
+                      class="inline-flex items-center gap-1.5 text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline"
                     >
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
-                    </svg>
-                  </button>
+                      <span>{{ isAuditExpanded(activeAudit.auditId || 'active', true) ? 'Collapse Audit' : 'Expand Audit' }}</span>
+                      <svg 
+                        class="w-4 h-4 transition-transform duration-200" 
+                        :class="{ 'rotate-180': isAuditExpanded(activeAudit.auditId || 'active', true) }"
+                        fill="none" 
+                        stroke="currentColor" 
+                        viewBox="0 0 24 24"
+                      >
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                      </svg>
+                    </button>
+                  </div>
                 </div>
 
-                <!-- Collapsible Details -->
-                <div 
-                  v-if="expandedServices[res.serviceName]"
-                  class="px-4 pb-4 pt-1 border-t border-gray-100 dark:border-gray-800/80 bg-white dark:bg-gray-950"
-                >
-                  <div v-if="res.failedParameters && res.failedParameters.length > 0" class="mt-2 space-y-2">
-                    <span class="text-xs font-bold text-red-600 dark:text-red-400 block uppercase tracking-wider">
-                      Flagged Parameters ({{ res.failedParameters.length }})
-                    </span>
-                    <div class="bg-red-50/70 dark:bg-red-950/40 border border-red-100 dark:border-red-900/50 rounded-xl p-3">
-                      <ul class="space-y-1.5">
-                        <li 
-                          v-for="param in res.failedParameters" 
-                          :key="param"
-                          class="text-xs font-mono text-red-700 dark:text-red-300 flex items-start gap-2 break-all"
-                        >
-                          <span class="text-red-400 shrink-0">•</span>
-                          <span>{{ param }}</span>
-                        </li>
-                      </ul>
+                <!-- Services inside Active Audit Run -->
+                <div v-if="isAuditExpanded(activeAudit.auditId || 'active', true)" class="p-4 space-y-2.5">
+                  <div 
+                    v-for="res in activeAudit.results" 
+                    :key="res.serviceName"
+                    class="border border-gray-100 dark:border-gray-800/80 bg-white dark:bg-gray-900/60 rounded-xl overflow-hidden transition-all duration-200"
+                  >
+                    <!-- Service Header Row -->
+                    <div 
+                      @click="toggleServiceExpand(activeAudit.auditId || 'active', res.serviceName)"
+                      class="flex items-center justify-between p-3.5 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors select-none"
+                    >
+                      <div class="flex items-center gap-2.5">
+                        <template v-if="getServiceStatusConfig(res).type === 'success'">
+                          <svg class="w-4 h-4 text-emerald-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>
+                        </template>
+                        <template v-else-if="getServiceStatusConfig(res).type === 'warning'">
+                          <svg class="w-4 h-4 text-amber-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+                        </template>
+                        <template v-else>
+                          <svg class="w-4 h-4 text-red-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                        </template>
+
+                        <span class="font-bold text-sm text-gray-900 dark:text-gray-100">{{ res.serviceName }}</span>
+
+                        <span class="px-2.5 py-0.5 rounded-full font-bold text-xs" :class="getServiceStatusConfig(res).badgeClass">
+                          {{ getServiceStatusConfig(res).label }}
+                        </span>
+                      </div>
+
+                      <button type="button" class="inline-flex items-center gap-1.5 text-xs font-semibold text-gray-500 hover:text-blue-600 dark:text-gray-400 dark:hover:text-blue-400">
+                        <span>{{ isServiceExpanded(activeAudit.auditId || 'active', res.serviceName, true) ? 'Collapse' : 'Expand' }}</span>
+                        <svg class="w-4 h-4 transition-transform duration-200" :class="{ 'rotate-180': isServiceExpanded(activeAudit.auditId || 'active', res.serviceName, true) }" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+                      </button>
+                    </div>
+
+                    <!-- Service Details -->
+                    <div v-if="isServiceExpanded(activeAudit.auditId || 'active', res.serviceName, true)" class="px-4 pb-4 pt-1 border-t border-gray-100 dark:border-gray-800/80 bg-gray-50/40 dark:bg-gray-950/60">
+                      <div v-if="res.failedParameters && res.failedParameters.length > 0" class="mt-2 space-y-2">
+                        <span class="text-xs font-bold text-red-600 dark:text-red-400 block uppercase tracking-wider">
+                          Flagged Parameters ({{ res.failedParameters.length }})
+                        </span>
+                        <div class="bg-red-50/70 dark:bg-red-950/40 border border-red-100 dark:border-red-900/50 rounded-xl p-3">
+                          <ul class="space-y-1.5">
+                            <li v-for="param in res.failedParameters" :key="param" class="text-xs font-mono text-red-700 dark:text-red-300 flex items-start gap-2 break-all">
+                              <span class="text-red-400 shrink-0">•</span>
+                              <span>{{ param }}</span>
+                            </li>
+                          </ul>
+                        </div>
+                      </div>
+                      <div v-else class="mt-2 flex items-center gap-2 text-xs text-emerald-600 dark:text-emerald-400 font-medium">
+                        <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+                        <span>Clean fingerprint validation - all check parameters passed successfully.</span>
+                      </div>
                     </div>
                   </div>
-                  <div v-else class="mt-2 flex items-center gap-2 text-xs text-emerald-600 dark:text-emerald-400 font-medium">
-                    <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
-                    <span>Clean fingerprint validation - all check parameters passed successfully.</span>
+                </div>
+              </div>
+
+              <!-- Button to Toggle Previous Audits -->
+              <div v-if="previousAudits.length > 0" class="pt-2 flex justify-center">
+                <button 
+                  @click="togglePreviousAudits()" 
+                  type="button"
+                  class="px-4 py-2 bg-gray-100 hover:bg-gray-200 dark:bg-gray-900 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-xl text-xs font-bold transition-all flex items-center gap-2 border border-gray-200 dark:border-gray-800"
+                >
+                  <svg class="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                  <span>{{ showPreviousAudits ? 'Hide Previous Audits' : `Show Previous Audits (${previousAudits.length})` }}</span>
+                </button>
+              </div>
+
+              <!-- Historical Audits List (Collapsible) -->
+              <div v-if="showPreviousAudits && previousAudits.length > 0" class="space-y-3 pt-2">
+                <h4 class="text-xs font-bold uppercase tracking-wider text-gray-400 px-1">Historical Audit Runs History</h4>
+                
+                <div 
+                  v-for="audit in previousAudits" 
+                  :key="audit.auditId || audit.lastAuditedAt"
+                  class="border border-gray-200 dark:border-gray-800/80 bg-gray-50/60 dark:bg-gray-900/30 rounded-2xl overflow-hidden transition-all duration-200"
+                >
+                  <!-- Historical Audit Run Header -->
+                  <div 
+                    @click="toggleAuditExpand(audit.auditId || audit.lastAuditedAt)"
+                    class="flex items-center justify-between p-3.5 cursor-pointer hover:bg-gray-100/60 dark:hover:bg-gray-800/50 transition-colors"
+                  >
+                    <div class="flex items-center gap-2.5">
+                      <span class="px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-gray-200 text-gray-700 dark:bg-gray-800 dark:text-gray-300 uppercase">
+                        Previous Audit
+                      </span>
+                      <span class="font-mono text-xs text-gray-500">
+                        ID: {{ audit.auditId ? audit.auditId.substring(0, 8) + '...' : 'HISTORICAL' }}
+                      </span>
+                      <span class="text-xs text-gray-400">
+                        {{ new Date(audit.lastAuditedAt).toLocaleString() }}
+                      </span>
+                    </div>
+
+                    <div class="flex items-center gap-3">
+                      <span class="px-2.5 py-0.5 rounded-full font-bold text-xs" :class="getAuditBadge(audit).class">
+                        {{ audit.overallTrustScore }}% {{ audit.overallStatus }}
+                      </span>
+
+                      <button type="button" class="inline-flex items-center gap-1 text-xs font-semibold text-gray-500 hover:text-blue-600 dark:hover:text-blue-400">
+                        <span>{{ isAuditExpanded(audit.auditId || audit.lastAuditedAt, false) ? 'Collapse' : 'Expand' }}</span>
+                        <svg class="w-4 h-4 transition-transform duration-200" :class="{ 'rotate-180': isAuditExpanded(audit.auditId || audit.lastAuditedAt, false) }" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+                      </button>
+                    </div>
+                  </div>
+
+                  <!-- Services inside Historical Audit Run -->
+                  <div v-if="isAuditExpanded(audit.auditId || audit.lastAuditedAt, false)" class="p-4 space-y-2.5 bg-white dark:bg-gray-950">
+                    <div 
+                      v-for="res in audit.results" 
+                      :key="res.serviceName"
+                      class="border border-gray-100 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-900/50 rounded-xl overflow-hidden transition-all duration-200"
+                    >
+                      <div 
+                        @click="toggleServiceExpand(audit.auditId || audit.lastAuditedAt, res.serviceName)"
+                        class="flex items-center justify-between p-3 cursor-pointer hover:bg-gray-100/60 dark:hover:bg-gray-800/60 transition-colors select-none"
+                      >
+                        <div class="flex items-center gap-2.5">
+                          <template v-if="getServiceStatusConfig(res).type === 'success'">
+                            <svg class="w-3.5 h-3.5 text-emerald-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>
+                          </template>
+                          <template v-else-if="getServiceStatusConfig(res).type === 'warning'">
+                            <svg class="w-3.5 h-3.5 text-amber-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+                          </template>
+                          <template v-else>
+                            <svg class="w-3.5 h-3.5 text-red-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                          </template>
+
+                          <span class="font-bold text-xs text-gray-900 dark:text-gray-100">{{ res.serviceName }}</span>
+
+                          <span class="px-2 py-0.5 rounded-full font-bold text-[10px]" :class="getServiceStatusConfig(res).badgeClass">
+                            {{ getServiceStatusConfig(res).label }}
+                          </span>
+                        </div>
+
+                        <button type="button" class="inline-flex items-center gap-1 text-[11px] font-semibold text-gray-400 hover:text-blue-600">
+                          <span>{{ isServiceExpanded(audit.auditId || audit.lastAuditedAt, res.serviceName, false) ? 'Collapse' : 'Expand' }}</span>
+                          <svg class="w-3.5 h-3.5 transition-transform duration-200" :class="{ 'rotate-180': isServiceExpanded(audit.auditId || audit.lastAuditedAt, res.serviceName, false) }" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+                        </button>
+                      </div>
+
+                      <div v-if="isServiceExpanded(audit.auditId || audit.lastAuditedAt, res.serviceName, false)" class="px-3 pb-3 pt-1 border-t border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-950">
+                        <div v-if="res.failedParameters && res.failedParameters.length > 0" class="mt-2 space-y-1.5">
+                          <span class="text-[10px] font-bold text-red-600 dark:text-red-400 block uppercase tracking-wider">
+                            Flagged Parameters ({{ res.failedParameters.length }})
+                          </span>
+                          <div class="bg-red-50/70 dark:bg-red-950/40 border border-red-100 dark:border-red-900/50 rounded-lg p-2.5">
+                            <ul class="space-y-1">
+                              <li v-for="param in res.failedParameters" :key="param" class="text-[11px] font-mono text-red-700 dark:text-red-300 flex items-start gap-1.5 break-all">
+                                <span class="text-red-400 shrink-0">•</span>
+                                <span>{{ param }}</span>
+                              </li>
+                            </ul>
+                          </div>
+                        </div>
+                        <div v-else class="mt-2 flex items-center gap-1.5 text-[11px] text-emerald-600 dark:text-emerald-400 font-medium">
+                          <svg class="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+                          <span>Clean fingerprint validation</span>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>

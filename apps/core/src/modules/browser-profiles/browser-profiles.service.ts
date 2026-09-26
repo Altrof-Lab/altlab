@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { BrowserProfileDto, StealthAuditVerdictDto, SpyhubNodeStatusDto, SpyhubNodeConfigDto, SingleNodeDataDto } from '@altlab/shared';
+import { BrowserProfileDto, StealthAuditVerdictDto, StealthServiceResult, SpyhubNodeStatusDto, SpyhubNodeConfigDto, SingleNodeDataDto } from '@altlab/shared';
 import { BotforgeClient } from '../../integrations/botforge/botforge.client';
 import { SpyhubClient } from '../../integrations/spyhub/spyhub.client';
 
@@ -225,40 +225,79 @@ export class BrowserProfilesService {
     if (!profile) return undefined;
 
     try {
-      const stealthResults = await this.botforgeClient.getStealthCheckResults(id);
-      if (stealthResults && stealthResults.length > 0) {
-        const results = stealthResults.map((r) => ({
-          serviceName: r.service,
-          statusCode: (r.statusCode || 'PASSED') as any,
-          trustScore: r.trustScore ?? 100,
-          failedParameters: r.failedParameters || [],
-        }));
+      const historyHeaders = await this.botforgeClient.getStealthAuditHistory(id);
+      if (historyHeaders && historyHeaders.length > 0) {
+        const stealthAuditHistory: StealthAuditVerdictDto[] = historyHeaders.map((header) => {
+          const results: StealthServiceResult[] = (header.lines || []).map((r) => ({
+            serviceName: r.service,
+            statusCode: (r.statusCode || 'PASSED') as any,
+            trustScore: r.trustScore ?? 100,
+            failedParameters: r.failedParameters || [],
+          }));
 
-        const latestTime = stealthResults.reduce((max, r) => {
-          const t = r.modifiedAt || r.createdAt;
-          return t && t > max ? t : max;
-        }, '');
+          const calculatedTrustScore = results.length > 0
+            ? Math.round(results.reduce((acc, r) => acc + (r.trustScore || 0), 0) / results.length)
+            : 100;
 
-        const calculatedTrustScore = Math.round(
-          results.reduce((acc, r) => acc + (r.trustScore || 0), 0) / (results.length || 1)
-        );
+          const hasFailed = results.some((r) => r.statusCode === 'FAILED');
+          const hasFlagged = results.some((r) => r.statusCode === 'FLAGGED');
+          const calculatedStatus = hasFailed ? 'FAILED' : hasFlagged ? 'WARNING' : 'PASSED';
 
-        const hasFailed = results.some((r) => r.statusCode === 'FAILED');
-        const hasFlagged = results.some((r) => r.statusCode === 'FLAGGED');
-        const calculatedStatus = hasFailed ? 'FAILED' : hasFlagged ? 'WARNING' : 'PASSED';
+          return {
+            auditId: header.id,
+            processInstanceId: header.processInstanceId || `bpmn-proc-${id.substring(0, 8)}`,
+            status: 'COMPLETED',
+            overallTrustScore: header.overallTrustScore ?? calculatedTrustScore,
+            overallStatus: (header.overallStatus || calculatedStatus) as any,
+            criticalFailureDetected: (header.overallStatus || calculatedStatus) === 'FAILED',
+            valid: Boolean(header.valid),
+            results,
+            lastAuditedAt: header.createdAt || new Date().toISOString(),
+          };
+        });
 
-        profile.stealthAudit = {
-          processInstanceId: profile.stealthAudit?.processInstanceId || `bpmn-proc-${id.substring(0, 8)}`,
-          status: 'COMPLETED',
-          overallTrustScore: profile.stealthAudit?.overallTrustScore ?? calculatedTrustScore,
-          overallStatus: (profile.stealthAudit?.overallStatus || calculatedStatus) as any,
-          criticalFailureDetected: (profile.stealthAudit?.overallStatus || calculatedStatus) === 'FAILED',
-          lastAuditedAt: latestTime || profile.stealthAudit?.lastAuditedAt || new Date().toISOString(),
-          results,
-        };
+        profile.stealthAuditHistory = stealthAuditHistory;
+        profile.stealthAudit = stealthAuditHistory.find((h) => h.valid) || stealthAuditHistory[0];
+      } else {
+        const stealthResults = await this.botforgeClient.getStealthCheckResults(id);
+        if (stealthResults && stealthResults.length > 0) {
+          const results = stealthResults.map((r) => ({
+            serviceName: r.service,
+            statusCode: (r.statusCode || 'PASSED') as any,
+            trustScore: r.trustScore ?? 100,
+            failedParameters: r.failedParameters || [],
+          }));
+
+          const latestTime = stealthResults.reduce((max, r) => {
+            const t = r.modifiedAt || r.createdAt;
+            return t && t > max ? t : max;
+          }, '');
+
+          const calculatedTrustScore = Math.round(
+            results.reduce((acc, r) => acc + (r.trustScore || 0), 0) / (results.length || 1)
+          );
+
+          const hasFailed = results.some((r) => r.statusCode === 'FAILED');
+          const hasFlagged = results.some((r) => r.statusCode === 'FLAGGED');
+          const calculatedStatus = hasFailed ? 'FAILED' : hasFlagged ? 'WARNING' : 'PASSED';
+
+          const singleVerdict: StealthAuditVerdictDto = {
+            processInstanceId: profile.stealthAudit?.processInstanceId || `bpmn-proc-${id.substring(0, 8)}`,
+            status: 'COMPLETED',
+            overallTrustScore: profile.stealthAudit?.overallTrustScore ?? calculatedTrustScore,
+            overallStatus: (profile.stealthAudit?.overallStatus || calculatedStatus) as any,
+            criticalFailureDetected: (profile.stealthAudit?.overallStatus || calculatedStatus) === 'FAILED',
+            valid: true,
+            lastAuditedAt: latestTime || profile.stealthAudit?.lastAuditedAt || new Date().toISOString(),
+            results,
+          };
+
+          profile.stealthAudit = singleVerdict;
+          profile.stealthAuditHistory = [singleVerdict];
+        }
       }
     } catch (err) {
-      console.warn(`[BotForge API] Failed to fetch stealth audit results for profile ${id}:`, err);
+      console.warn(`[BotForge API] Failed to fetch stealth audit history for profile ${id}:`, err);
     }
 
     return profile;

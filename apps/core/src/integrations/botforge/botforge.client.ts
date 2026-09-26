@@ -3,6 +3,7 @@ import { AxiosInstance } from 'axios';
 import { createBotforgeHttpClient } from './botforge-http.client';
 import { 
   BrowserStealthCheckResult, 
+  BrowserStealthAuditHeaderResponseDto,
   ProcessStartResponse, 
   AuditStatusResponse, 
   QuickCheckRequest 
@@ -46,6 +47,20 @@ export class BotforgeClient {
       return response.data || [];
     } catch (err) {
       console.warn(`[BotForge API] Could not fetch stealth check results for profile ${profileId}`);
+      return [];
+    }
+  }
+
+  /**
+   * GET /api/v1/stealth-check/history/{profileId}
+   * Returns full stealth audit run history (headers + line items) for a profile.
+   */
+  async getStealthAuditHistory(profileId: string): Promise<BrowserStealthAuditHeaderResponseDto[]> {
+    try {
+      const response = await this.http.get<BrowserStealthAuditHeaderResponseDto[]>(`/api/v1/stealth-check/history/${profileId}`);
+      return response.data || [];
+    } catch (err) {
+      console.warn(`[BotForge API] Could not fetch stealth audit history for profile ${profileId}`);
       return [];
     }
   }

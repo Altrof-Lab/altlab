@@ -56,3 +56,17 @@ export interface AuditStatusResponse {
   criticalFailureDetected?: boolean;
   results: ServiceCheckResult[];
 }
+
+export interface BrowserStealthAuditHeaderResponseDto {
+  id: string;
+  profileId: string;
+  sessionId?: string;
+  ipAddress?: string;
+  processInstanceId?: string;
+  overallTrustScore?: number;
+  overallStatus?: string;
+  valid: boolean;
+  lines: BrowserStealthCheckResult[];
+  createdAt: string;
+  modifiedAt?: string;
+}

@@ -63,11 +63,13 @@ export interface StealthServiceResult {
 }
 
 export interface StealthAuditVerdictDto {
+  auditId?: string;
   processInstanceId: string;
   status: 'RUNNING' | 'COMPLETED' | 'FAILED';
   overallTrustScore: number; // 0 - 100
   overallStatus: 'PASSED' | 'WARNING' | 'FAILED';
   criticalFailureDetected: boolean;
+  valid?: boolean;
   results: StealthServiceResult[];
   lastAuditedAt: string;
 }
@@ -91,6 +93,7 @@ export interface BrowserProfileDto {
   linkedAccountId?: string;
   linkedAccountName?: string;
   stealthAudit?: StealthAuditVerdictDto;
+  stealthAuditHistory?: StealthAuditVerdictDto[];
   cookieFarm?: CookieFarmStatusDto;
   createdAt: string;
 }
