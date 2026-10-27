@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router';
 import type { BrowserProfileDto } from '@altlab/shared';
 import { STEALTH_DIAGNOSTIC_RULES } from '../../config/stealth-rules';
 import { STEALTH_DIAGNOSTIC_RULES_RU } from '../../config/stealth-rules.ru';
+import StealthTelemetryWidget from '../../components/stealth/StealthTelemetryWidget.vue';
 
 const route = useRoute();
 const router = useRouter();
@@ -632,6 +633,9 @@ const warningRecommendationsCount = computed(() =>
                         </button>
                       </div>
 
+                      <!-- Rich Scraped Telemetry Widget -->
+                      <StealthTelemetryWidget :service-name="res.serviceName" :report="(res as any).report" />
+
                       <div v-if="res.failedParameters && res.failedParameters.length > 0" class="space-y-3">
                         <!-- Categorized Threat Parameter Cards -->
                         <div class="space-y-2">
@@ -788,6 +792,8 @@ const warningRecommendationsCount = computed(() =>
                       </div>
 
                       <div v-if="isServiceExpanded(audit.auditId || audit.lastAuditedAt, res.serviceName)" class="px-3 pb-3 pt-1 border-t border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-950">
+                        <!-- Rich Scraped Telemetry Widget -->
+                        <StealthTelemetryWidget :service-name="res.serviceName" :report="(res as any).report" />
                         <div v-if="res.failedParameters && res.failedParameters.length > 0" class="mt-2 space-y-1.5">
                           <span class="text-[10px] font-bold text-red-600 dark:text-red-400 block uppercase tracking-wider">
                             Flagged Parameters ({{ res.failedParameters.length }})

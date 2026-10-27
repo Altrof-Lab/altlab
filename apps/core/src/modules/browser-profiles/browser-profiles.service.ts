@@ -233,6 +233,7 @@ export class BrowserProfilesService {
             statusCode: (r.statusCode || 'PASSED') as any,
             trustScore: r.trustScore ?? 100,
             failedParameters: r.failedParameters || [],
+            report: r.report || null,
           }));
 
           const calculatedTrustScore = results.length > 0
@@ -266,6 +267,7 @@ export class BrowserProfilesService {
             statusCode: (r.statusCode || 'PASSED') as any,
             trustScore: r.trustScore ?? 100,
             failedParameters: r.failedParameters || [],
+            report: r.report || null,
           }));
 
           const latestTime = stealthResults.reduce((max, r) => {

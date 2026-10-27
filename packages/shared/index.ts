@@ -60,6 +60,7 @@ export interface StealthServiceResult {
   statusCode: 'PASSED' | 'FAILED' | 'FLAGGED';
   trustScore: number; // 0 - 100
   failedParameters?: string[];
+  report?: any;
 }
 
 export interface StealthAuditVerdictDto {

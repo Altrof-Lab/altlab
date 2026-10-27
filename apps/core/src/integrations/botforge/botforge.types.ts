@@ -23,7 +23,7 @@ export interface BrowserStealthCheckResult {
   statusCode?: 'PASSED' | 'FAILED' | 'FLAGGED' | string;
   trustScore?: number;
   failedParameters?: string[];
-  report?: StealthReport;
+  report?: any;
   verdict?: StealthValidationVerdict;
   valid: boolean;
   createdAt: string;
@@ -46,6 +46,7 @@ export interface ServiceCheckResult {
   statusCode: 'PASSED' | 'FAILED' | 'FLAGGED' | string;
   trustScore: number;
   failedParameters?: string[];
+  report?: any;
 }
 
 export interface AuditStatusResponse {
