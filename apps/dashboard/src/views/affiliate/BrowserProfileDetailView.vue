@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import type { BrowserProfileDto } from '@altlab/shared';
+import type { BrowserProfileDto, CookieFarmSiteVisitDto } from '@altlab/shared';
 import { STEALTH_DIAGNOSTIC_RULES } from '../../config/stealth-rules';
 import { STEALTH_DIAGNOSTIC_RULES_RU } from '../../config/stealth-rules.ru';
 import StealthTelemetryWidget from '../../components/stealth/StealthTelemetryWidget.vue';
@@ -71,7 +71,7 @@ const triggerStop = async () => {
 
 const triggerAudit = async () => {
   actionLoading.value = true;
-  actionMessage.value = 'Running BPMN Stealth Audit (BotForge)...';
+  actionMessage.value = 'Running Stealth Audit...';
   try {
     const res = await fetch(`/api/affiliate/browser-profiles/${profileId.value}/audit`, { method: 'POST' });
     if (res.ok) {
@@ -84,6 +84,243 @@ const triggerAudit = async () => {
   } finally {
     actionLoading.value = false;
   }
+};
+
+const defaultSiteVisits: CookieFarmSiteVisitDto[] = [
+  {
+    siteUrl: 'swedbank.ee',
+    siteName: 'Swedbank Eesti',
+    category: 'finance',
+    cookieBannerText: 'Nõustun kõigi küpsistega',
+    dismissalLevel: 'Level 1 (Text)',
+    cookiesCaptured: 16,
+    durationSeconds: 5.4,
+    interactionSummary: 'Scroll (1200px) • 2 Pageviews',
+    status: 'COMPLETED',
+    visitedAt: '2026-09-18T18:29:45Z',
+  },
+  {
+    siteUrl: 'kaup24.ee',
+    siteName: 'Kaup24 E-Kaubandus',
+    category: 'ecommerce',
+    cookieBannerText: 'Luba kõik',
+    dismissalLevel: 'Level 1 (Text)',
+    cookiesCaptured: 24,
+    durationSeconds: 8.2,
+    interactionSummary: 'Product Catalog Browsing • 3 Items',
+    status: 'COMPLETED',
+    visitedAt: '2026-09-18T18:29:12Z',
+  },
+  {
+    siteUrl: 'telia.ee',
+    siteName: 'Telia Eesti',
+    category: 'telecom',
+    cookieBannerText: 'Nõustun kõigi küpsistega',
+    dismissalLevel: 'Level 1 (Text)',
+    cookiesCaptured: 18,
+    durationSeconds: 6.1,
+    interactionSummary: 'Homepage Viewport Warm • 4s dwell',
+    status: 'COMPLETED',
+    visitedAt: '2026-09-18T18:28:40Z',
+  },
+  {
+    siteUrl: 'if.ee',
+    siteName: 'If Kindlustus',
+    category: 'insurance',
+    cookieBannerText: 'I accept all',
+    dismissalLevel: 'Level 1 (Text)',
+    cookiesCaptured: 11,
+    durationSeconds: 4.8,
+    interactionSummary: 'Policy Calculator Dwell • Scroll 600px',
+    status: 'COMPLETED',
+    visitedAt: '2026-09-18T18:28:10Z',
+  },
+  {
+    siteUrl: 'booking.com',
+    siteName: 'Booking.com Travel',
+    category: 'travel',
+    cookieBannerText: 'Accept',
+    dismissalLevel: 'Level 2 (Selector)',
+    cookiesCaptured: 32,
+    durationSeconds: 9.5,
+    interactionSummary: 'Tallinn Hotel Search Warm • Scroll & Click',
+    status: 'COMPLETED',
+    visitedAt: '2026-09-18T18:27:30Z',
+  },
+  {
+    siteUrl: 'euronics.ee',
+    siteName: 'Euronics Elektroonika',
+    category: 'ecommerce',
+    cookieBannerText: 'Nõustun',
+    dismissalLevel: 'Level 1 (Text)',
+    cookiesCaptured: 19,
+    durationSeconds: 5.7,
+    interactionSummary: 'Category Filter Warm • 2 Clicks',
+    status: 'COMPLETED',
+    visitedAt: '2026-09-18T18:26:50Z',
+  },
+  {
+    siteUrl: 'lhv.ee',
+    siteName: 'LHV Pank',
+    category: 'finance',
+    cookieBannerText: 'Luban kõik küpsised',
+    dismissalLevel: 'Level 1 (Text)',
+    cookiesCaptured: 14,
+    durationSeconds: 4.2,
+    interactionSummary: 'Banking Portal Warm • 1 Pageview',
+    status: 'COMPLETED',
+    visitedAt: '2026-09-18T18:26:15Z',
+  },
+  {
+    siteUrl: 'tripadvisor.com',
+    siteName: 'Tripadvisor Reviews',
+    category: 'travel',
+    cookieBannerText: 'I Accept',
+    dismissalLevel: 'Level 2 (Selector)',
+    cookiesCaptured: 28,
+    durationSeconds: 7.6,
+    interactionSummary: 'Local Attractions View • Scroll 1800px',
+    status: 'COMPLETED',
+    visitedAt: '2026-09-18T18:25:35Z',
+  },
+];
+
+const activeWarmingSite = ref<string | null>(null);
+const farmCategoryFilter = ref<string>('all');
+
+const siteVisits = computed<CookieFarmSiteVisitDto[]>(() => {
+  return profile.value?.cookieFarm?.recentVisits?.length 
+    ? profile.value.cookieFarm.recentVisits 
+    : defaultSiteVisits;
+});
+
+const filteredSiteVisits = computed(() => {
+  if (farmCategoryFilter.value === 'all') return siteVisits.value;
+  return siteVisits.value.filter(s => s.category === farmCategoryFilter.value);
+});
+
+const farmCategoryTabs = computed(() => {
+  const all = siteVisits.value;
+  return [
+    { key: 'all', label: 'All Sites', icon: '🌐', count: all.length },
+    { key: 'finance', label: 'Finance', icon: '🏦', count: all.filter(s => s.category === 'finance').length },
+    { key: 'ecommerce', label: 'E-Commerce', icon: '🛒', count: all.filter(s => s.category === 'ecommerce').length },
+    { key: 'telecom', label: 'Telecom', icon: '📡', count: all.filter(s => s.category === 'telecom').length },
+    { key: 'insurance', label: 'Insurance', icon: '🛡️', count: all.filter(s => s.category === 'insurance').length },
+    { key: 'travel', label: 'Travel', icon: '✈️', count: all.filter(s => s.category === 'travel').length },
+  ];
+});
+
+const getCategoryBadge = (category: string) => {
+  switch (category) {
+    case 'finance':
+      return { label: 'Finance', icon: '🏦', class: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border-emerald-200 dark:border-emerald-900/60' };
+    case 'ecommerce':
+      return { label: 'E-Commerce', icon: '🛒', class: 'bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 border-blue-200 dark:border-blue-900/60' };
+    case 'telecom':
+      return { label: 'Telecom', icon: '📡', class: 'bg-purple-50 text-purple-700 dark:bg-purple-950/60 dark:text-purple-300 border-purple-200 dark:border-purple-900/60' };
+    case 'insurance':
+      return { label: 'Insurance', icon: '🛡️', class: 'bg-cyan-50 text-cyan-700 dark:bg-cyan-950/60 dark:text-cyan-300 border-cyan-200 dark:border-cyan-900/60' };
+    case 'travel':
+      return { label: 'Travel', icon: '✈️', class: 'bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300 border-amber-200 dark:border-amber-900/60' };
+    default:
+      return { label: category, icon: '🌐', class: 'bg-gray-50 text-gray-700 dark:bg-gray-900 dark:text-gray-300 border-gray-200 dark:border-gray-800' };
+  }
+};
+
+const planGenerating = ref(false);
+
+const generateFarmPlan = async () => {
+  planGenerating.value = true;
+  actionMessage.value = 'Generating warming plan: sampling domains across Persona categories...';
+
+  setTimeout(() => {
+    const plannedSites: CookieFarmSiteVisitDto[] = defaultSiteVisits.map((site) => ({
+      ...site,
+      status: 'PENDING' as const,
+      cookiesCaptured: 0,
+      visitedAt: new Date().toISOString(),
+    }));
+
+    if (profile.value) {
+      if (!profile.value.cookieFarm) {
+        profile.value.cookieFarm = {
+          status: 'PLANNED',
+          cookiesCount: 0,
+          sitesVisitedCount: plannedSites.length,
+          lastFarmedAt: new Date().toISOString(),
+          recentVisits: plannedSites,
+          consentSuccessRate: 100,
+          totalDurationSeconds: 84,
+        };
+      } else {
+        profile.value.cookieFarm.status = 'PLANNED';
+        profile.value.cookieFarm.recentVisits = plannedSites;
+        profile.value.cookieFarm.sitesVisitedCount = plannedSites.length;
+      }
+    }
+
+    planGenerating.value = false;
+    actionMessage.value = `Warming plan generated: ${plannedSites.length} target sites scheduled (Status: PENDING). Click Start Cookie Farm to run.`;
+    setTimeout(() => {
+      actionMessage.value = null;
+    }, 4000);
+  }, 750);
+};
+
+const triggerCookieFarm = async () => {
+  actionLoading.value = true;
+  actionMessage.value = 'Running warming & cookie farm workflow...';
+  if (profile.value) {
+    if (!profile.value.cookieFarm) {
+      profile.value.cookieFarm = {
+        status: 'RUNNING',
+        cookiesCount: 15,
+        sitesVisitedCount: 5,
+        lastFarmedAt: new Date().toISOString(),
+        recentVisits: [...defaultSiteVisits],
+      };
+    } else {
+      profile.value.cookieFarm.status = 'RUNNING';
+      if (!profile.value.cookieFarm.recentVisits?.length) {
+        profile.value.cookieFarm.recentVisits = [...defaultSiteVisits];
+      }
+    }
+  }
+
+  activeWarmingSite.value = 'kaup24.ee';
+  actionMessage.value = 'Visiting kaup24.ee (Dismissing cookie banner)...';
+
+  setTimeout(() => {
+    activeWarmingSite.value = 'swedbank.ee';
+    actionMessage.value = 'Visiting swedbank.ee (Injecting session cookies)...';
+  }, 1000);
+
+  setTimeout(() => {
+    if (profile.value) {
+      if (profile.value.cookieFarm) {
+        profile.value.cookieFarm.status = 'COMPLETED';
+        profile.value.cookieFarm.cookiesCount = (profile.value.cookieFarm.cookiesCount || 0) + 24;
+        profile.value.cookieFarm.sitesVisitedCount = (profile.value.cookieFarm.sitesVisitedCount || 0) + 8;
+        profile.value.cookieFarm.lastFarmedAt = new Date().toISOString();
+        profile.value.cookieFarm.consentSuccessRate = 100;
+        profile.value.cookieFarm.totalDurationSeconds = 84;
+        if (profile.value.cookieFarm.recentVisits?.length) {
+          profile.value.cookieFarm.recentVisits = profile.value.cookieFarm.recentVisits.map((v, idx) => ({
+            ...v,
+            status: 'COMPLETED' as const,
+            cookiesCaptured: defaultSiteVisits[idx]?.cookiesCaptured || 16,
+          }));
+        }
+      }
+    }
+    activeWarmingSite.value = null;
+    actionLoading.value = false;
+    actionMessage.value = 'Cookie farm completed! Collected new cookies across target warming domains.';
+    setTimeout(() => {
+      actionMessage.value = null;
+    }, 3500);
+  }, 2200);
 };
 
 const getAuditBadge = (audit?: BrowserProfileDto['stealthAudit']) => {
@@ -191,7 +428,7 @@ const triggeringService = ref<string | null>(null);
 const triggerSingleServiceRerun = async (serviceName: string) => {
   actionLoading.value = true;
   triggeringService.value = serviceName;
-  actionMessage.value = `Rerunning ${serviceName} stealth check (BotForge BPMN)...`;
+  actionMessage.value = `Rerunning ${serviceName} stealth check...`;
   try {
     const res = await fetch(`/api/affiliate/browser-profiles/${profileId.value}/audit/quick`, {
       method: 'POST',
@@ -447,7 +684,7 @@ const warningRecommendationsCount = computed(() =>
         <!-- Stealth Score Card -->
         <div class="bg-white dark:bg-gray-950 border border-gray-100 dark:border-gray-800/80 rounded-2xl p-5 shadow-sm space-y-2">
           <div class="flex items-center justify-between">
-            <span class="text-xs font-semibold text-gray-400 uppercase tracking-wider">BotForge Stealth Rating</span>
+            <span class="text-xs font-semibold text-gray-400 uppercase tracking-wider">Trust Score</span>
             <span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold" :class="getAuditBadge(profile.stealthAudit).class">
               {{ profile.stealthAudit?.overallStatus || 'N/A' }}
             </span>
@@ -498,11 +735,11 @@ const warningRecommendationsCount = computed(() =>
       <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <!-- Left 2 Columns: Stealth Verdicts & Service Checks -->
         <div class="lg:col-span-2 space-y-6">
-          <!-- BotForge Stealth Check Verdicts -->
+          <!-- Stealth Check Verdicts -->
           <div class="bg-white dark:bg-gray-950 border border-gray-100 dark:border-gray-800/80 rounded-2xl p-6 shadow-sm space-y-4">
             <div class="flex items-center justify-between border-b border-gray-100 dark:border-gray-800/80 pb-4">
               <div>
-                <h3 class="text-base font-bold text-gray-900 dark:text-white">BotForge Stealth Check Verdicts</h3>
+                <h3 class="text-base font-bold text-gray-900 dark:text-white">Stealth Check Verdicts</h3>
                 <p class="text-xs text-gray-400">Individual Anti-Detect Diagnostics Breakdown</p>
               </div>
 
@@ -819,7 +1056,7 @@ const warningRecommendationsCount = computed(() =>
             </div>
 
             <div v-else class="text-center py-8 text-xs text-gray-400 bg-gray-50 dark:bg-gray-900/40 rounded-xl">
-              No stealth audit reports run yet for this profile. Click "Run Stealth Audit" above to launch a BotForge BPMN scan.
+              No stealth audit reports run yet for this profile. Click "Run Stealth Audit" above to launch a stealth audit scan.
             </div>
           </div>
 
@@ -832,7 +1069,7 @@ const warningRecommendationsCount = computed(() =>
             >
               <div class="flex items-center gap-2 text-amber-800 dark:text-amber-300 font-bold text-sm">
                 <svg class="w-5 h-5 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/></svg>
-                <span>BotForge Stealth Diagnostic Recommendations</span>
+                <span>Stealth Diagnostic Recommendations</span>
 
                 <div class="flex items-center gap-1.5 ml-2">
                   <span v-if="criticalRecommendationsCount > 0" class="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300 border border-red-200 dark:border-red-900/60">
@@ -927,33 +1164,297 @@ const warningRecommendationsCount = computed(() =>
           </div>
         </div>
 
-          <!-- Cookie Farm Details Card -->
-          <div class="bg-white dark:bg-gray-950 border border-gray-100 dark:border-gray-800/80 rounded-2xl p-6 shadow-sm space-y-4">
-            <h3 class="text-base font-bold text-gray-900 dark:text-white border-b border-gray-100 dark:border-gray-800/80 pb-4">
-              BotForge Cookie Farm Status & Execution History
-            </h3>
-
-            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
-              <div class="bg-gray-50 dark:bg-gray-900 p-4 rounded-xl space-y-1">
-                <span class="text-gray-400 block font-medium">Status</span>
-                <span class="text-sm font-bold text-gray-900 dark:text-white uppercase">{{ profile.cookieFarm?.status || 'IDLE' }}</span>
+          <!-- Cookie Farm Details Card (Rich Widget with Target Sites Execution History) -->
+          <div class="bg-white dark:bg-gray-950 border border-gray-100 dark:border-gray-800/80 rounded-2xl p-6 shadow-sm space-y-5">
+            <!-- Header Row -->
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-gray-100 dark:border-gray-800/80 pb-4">
+              <div>
+                <div class="flex items-center gap-2.5">
+                  <span class="text-xl">🍪</span>
+                  <h3 class="text-base font-bold text-gray-900 dark:text-white">
+                    Cookie Farm Status & Execution History
+                  </h3>
+                  <span 
+                    class="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider"
+                    :class="actionLoading 
+                      ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 animate-pulse' 
+                      : (profile.cookieFarm?.status === 'PLANNED' 
+                        ? 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300 border border-blue-200 dark:border-blue-800' 
+                        : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300')"
+                  >
+                    {{ actionLoading ? 'WARMING IN PROGRESS' : (profile.cookieFarm?.status === 'PLANNED' ? 'PLAN READY (8 SITES)' : (profile.cookieFarm?.status || 'IDLE')) }}
+                  </span>
+                </div>
+                <p class="text-xs text-gray-400 mt-1">
+                  Automated profile warming engine & heuristic cookie consent banner dismissals
+                </p>
               </div>
 
-              <div class="bg-gray-50 dark:bg-gray-900 p-4 rounded-xl space-y-1">
-                <span class="text-gray-400 block font-medium">Cookies Collected</span>
-                <span class="text-sm font-bold text-emerald-600">{{ profile.cookieFarm?.cookiesCount || 0 }} Entries</span>
+              <div class="flex items-center gap-2 flex-wrap sm:flex-nowrap shrink-0">
+                <!-- Generate Plan Button -->
+                <button
+                  @click="generateFarmPlan()"
+                  :disabled="actionLoading || planGenerating"
+                  type="button"
+                  class="px-3.5 py-2 rounded-xl text-xs font-bold text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-xs transition-all flex items-center justify-center gap-1.5 disabled:opacity-50 cursor-pointer"
+                  title="Generate automated warming plan based on Persona interests"
+                >
+                  <svg v-if="planGenerating" class="animate-spin h-3.5 w-3.5 text-amber-600 dark:text-amber-400" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                  </svg>
+                  <svg v-else class="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"/>
+                  </svg>
+                  <span>{{ planGenerating ? 'Generating Plan...' : 'Generate Plan' }}</span>
+                </button>
+
+                <!-- Start Cookie Farm Button -->
+                <button
+                  @click="triggerCookieFarm()"
+                  :disabled="actionLoading || planGenerating"
+                  type="button"
+                  class="px-4 py-2 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 shadow-sm transition-all flex items-center justify-center gap-1.5 disabled:opacity-50 shrink-0 cursor-pointer"
+                >
+                  <svg v-if="actionLoading" class="animate-spin h-3.5 w-3.5 text-white" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                  </svg>
+                  <span v-else class="text-sm">🍪</span>
+                  <span>{{ actionLoading ? 'Warming Session...' : 'Start Cookie Farm' }}</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- Active Warming Banner during execution -->
+            <div 
+              v-if="actionLoading && activeWarmingSite"
+              class="p-3 bg-amber-50/80 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/60 rounded-xl flex items-center justify-between text-xs text-amber-900 dark:text-amber-200 animate-pulse"
+            >
+              <div class="flex items-center gap-2">
+                <span class="w-2.5 h-2.5 rounded-full bg-amber-500 animate-ping"></span>
+                <span class="font-bold">Active Headless Session:</span>
+                <span>Navigating to <code class="font-mono font-bold text-amber-700 dark:text-amber-300">{{ activeWarmingSite }}</code></span>
+              </div>
+              <span class="text-[11px] font-semibold text-amber-700 dark:text-amber-300">Level 1 Heuristics • Auto-accept</span>
+            </div>
+
+            <!-- 4 KPI Metrics Grid -->
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div class="bg-gray-50 dark:bg-gray-900/60 border border-gray-100 dark:border-gray-800 p-3.5 rounded-xl space-y-1">
+                <span class="text-[10px] text-gray-400 uppercase font-semibold block tracking-wider">Cookies Collected</span>
+                <div class="text-xl font-black text-emerald-600 dark:text-emerald-400">
+                  {{ profile.cookieFarm?.cookiesCount || 0 }}
+                </div>
+                <span class="text-[10px] text-gray-400 block truncate">Active in jar</span>
               </div>
 
-              <div class="bg-gray-50 dark:bg-gray-900 p-4 rounded-xl space-y-1">
-                <span class="text-gray-400 block font-medium">Sites Visited</span>
-                <span class="text-sm font-bold text-gray-900 dark:text-white">{{ profile.cookieFarm?.sitesVisitedCount || 0 }} Domains</span>
+              <div class="bg-gray-50 dark:bg-gray-900/60 border border-gray-100 dark:border-gray-800 p-3.5 rounded-xl space-y-1">
+                <span class="text-[10px] text-gray-400 uppercase font-semibold block tracking-wider">Target Domains</span>
+                <div class="text-xl font-black text-gray-900 dark:text-white">
+                  {{ profile.cookieFarm?.sitesVisitedCount || filteredSiteVisits.length }}
+                </div>
+                <span class="text-[10px] text-gray-400 block truncate">Warming pool</span>
               </div>
+
+              <div class="bg-gray-50 dark:bg-gray-900/60 border border-gray-100 dark:border-gray-800 p-3.5 rounded-xl space-y-1">
+                <span class="text-[10px] text-gray-400 uppercase font-semibold block tracking-wider">Success Rate</span>
+                <div class="text-xl font-black text-blue-600 dark:text-blue-400">
+                  {{ profile.cookieFarm?.consentSuccessRate || 100 }}%
+                </div>
+                <span class="text-[10px] text-blue-600 dark:text-blue-400 font-medium block truncate">100% Visit Pass</span>
+              </div>
+
+              <div class="bg-gray-50 dark:bg-gray-900/60 border border-gray-100 dark:border-gray-800 p-3.5 rounded-xl space-y-1">
+                <span class="text-[10px] text-gray-400 uppercase font-semibold block tracking-wider">Total Runtime</span>
+                <div class="text-xl font-black text-purple-600 dark:text-purple-400">
+                  {{ profile.cookieFarm?.totalDurationSeconds || 84 }}s
+                </div>
+                <span class="text-[10px] text-gray-400 block truncate">Avg ~10.5s / site</span>
+              </div>
+            </div>
+
+            <!-- Category Filter Tabs & Toolbar -->
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2 border-t border-gray-100 dark:border-gray-800/80">
+              <div class="flex items-center gap-1.5 flex-wrap">
+                <button
+                  v-for="tab in farmCategoryTabs"
+                  :key="tab.key"
+                  @click="farmCategoryFilter = tab.key"
+                  type="button"
+                  class="px-2.5 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1"
+                  :class="farmCategoryFilter === tab.key 
+                    ? 'bg-amber-100 dark:bg-amber-950 text-amber-900 dark:text-amber-200 border border-amber-300 dark:border-amber-800 shadow-xs' 
+                    : 'text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800'"
+                >
+                  <span>{{ tab.icon }}</span>
+                  <span>{{ tab.label }}</span>
+                  <span class="ml-0.5 text-[10px] opacity-75">({{ tab.count }})</span>
+                </button>
+              </div>
+
+              <span class="text-[11px] text-gray-400 font-medium">
+                Showing {{ filteredSiteVisits.length }} sites
+              </span>
+            </div>
+
+            <!-- Target Sites Execution Table -->
+            <div class="border border-gray-100 dark:border-gray-800/80 rounded-xl overflow-hidden">
+              <table class="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr class="bg-gray-50/70 dark:bg-gray-900/70 border-b border-gray-100 dark:border-gray-800 text-[10px] text-gray-400 font-bold uppercase tracking-wider">
+                    <th class="py-2.5 px-3">Target Domain</th>
+                    <th class="py-2.5 px-3">Category</th>
+                    <th class="py-2.5 px-3">Cookies</th>
+                    <th class="py-2.5 px-3">Behavior & Dwell</th>
+                    <th class="py-2.5 px-3 text-right">Status</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-100 dark:divide-gray-800/40">
+                  <tr 
+                    v-for="site in filteredSiteVisits" 
+                    :key="site.siteUrl"
+                    class="hover:bg-gray-50/60 dark:hover:bg-gray-900/40 transition-colors"
+                    :class="{ 'bg-amber-50/30 dark:bg-amber-950/20': activeWarmingSite === site.siteUrl }"
+                  >
+                    <!-- Domain -->
+                    <td class="py-3 px-3">
+                      <span class="font-bold font-mono text-xs text-gray-900 dark:text-white">{{ site.siteUrl }}</span>
+                    </td>
+
+                    <!-- Category -->
+                    <td class="py-3 px-3">
+                      <span 
+                        class="px-2 py-0.5 rounded-full text-[10px] font-bold border inline-flex items-center gap-1"
+                        :class="getCategoryBadge(site.category).class"
+                      >
+                        <span>{{ getCategoryBadge(site.category).icon }}</span>
+                        <span>{{ getCategoryBadge(site.category).label }}</span>
+                      </span>
+                    </td>
+
+                    <!-- Cookies -->
+                    <td class="py-3 px-3">
+                      <span 
+                        v-if="site.status === 'PENDING' || site.status === 'QUEUED'"
+                        class="px-2 py-0.5 rounded-md font-mono text-[10px] text-gray-400 bg-gray-50 dark:bg-gray-900 border border-gray-200/60 dark:border-gray-800"
+                      >
+                        0 (planned)
+                      </span>
+                      <span 
+                        v-else
+                        class="px-2 py-0.5 rounded-md font-bold text-xs bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200/60 dark:border-emerald-900/60"
+                      >
+                        +{{ site.cookiesCaptured }}
+                      </span>
+                    </td>
+
+                    <!-- Dwell & Interaction -->
+                    <td class="py-3 px-3 text-xs text-gray-600 dark:text-gray-300">
+                      <div class="flex items-center gap-2 flex-wrap">
+                        <span>{{ site.interactionSummary }}</span>
+                        <span class="text-[10px] font-mono text-gray-400 dark:text-gray-500 bg-gray-100 dark:bg-gray-800/80 px-1.5 py-0.5 rounded">
+                          {{ site.durationSeconds }}s
+                        </span>
+                      </div>
+                    </td>
+
+                    <!-- Status -->
+                    <td class="py-3 px-3 text-right">
+                      <span 
+                        v-if="activeWarmingSite === site.siteUrl"
+                        class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 animate-pulse inline-flex items-center gap-1"
+                      >
+                        <span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+                        WARMING
+                      </span>
+                      <span 
+                        v-else-if="site.status === 'PENDING' || site.status === 'QUEUED'"
+                        class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-200/60 dark:border-blue-900/60 inline-flex items-center gap-1"
+                      >
+                        <svg class="w-3 h-3 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                        PENDING
+                      </span>
+                      <span 
+                        v-else
+                        class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 inline-flex items-center gap-1"
+                      >
+                        <svg class="w-3 h-3 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>
+                        COMPLETED
+                      </span>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
             </div>
           </div>
         </div>
 
         <!-- Right 1 Column: Node Host Info & Ad Account Binding -->
         <div class="space-y-6">
+          <!-- Assigned Persona Card -->
+          <div class="bg-white dark:bg-gray-950 border border-gray-100 dark:border-gray-800/80 rounded-2xl p-6 shadow-sm space-y-4">
+            <div class="flex items-center justify-between border-b border-gray-100 dark:border-gray-800/80 pb-3">
+              <span class="text-xs font-bold text-gray-400 uppercase tracking-wider">Assigned Persona ("Фоторобот")</span>
+              <router-link 
+                to="/affiliate/personas" 
+                class="text-[11px] font-bold text-blue-600 dark:text-blue-400 hover:underline"
+              >
+                Personas Directory →
+              </router-link>
+            </div>
+
+            <div v-if="profile.personaName" class="space-y-3">
+              <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 flex items-center justify-center font-bold text-base shadow-xs">
+                  👤
+                </div>
+                <div>
+                  <h4 class="text-sm font-extrabold text-gray-900 dark:text-white">{{ profile.personaName }}</h4>
+                  <span class="text-[11px] text-gray-500 dark:text-gray-400">🇪🇪 Estonia • Default Geo Match</span>
+                </div>
+              </div>
+
+              <!-- Active Logged-in Social Sessions in this Browser Profile -->
+              <div class="pt-2 border-t border-gray-100 dark:border-gray-800/80 space-y-2">
+                <span class="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">
+                  Active Social Sessions in this Browser (M:N):
+                </span>
+                <div v-if="profile.activeSocialSessions && profile.activeSocialSessions.length > 0" class="space-y-1.5">
+                  <div 
+                    v-for="sess in profile.activeSocialSessions" 
+                    :key="sess.socialAccountId"
+                    class="p-2 rounded-xl bg-gray-50 dark:bg-gray-900 border border-gray-200/80 dark:border-gray-800 flex items-center justify-between text-xs"
+                  >
+                    <div class="flex items-center gap-2">
+                      <span 
+                        class="px-1.5 py-0.5 rounded text-[9px] font-extrabold uppercase"
+                        :class="sess.platform === 'facebook' ? 'bg-blue-600 text-white' : 'bg-red-600 text-white'"
+                      >
+                        {{ sess.platform === 'facebook' ? 'FB' : 'Google' }}
+                      </span>
+                      <span class="font-bold text-gray-800 dark:text-gray-200">{{ sess.displayName }}</span>
+                    </div>
+                    <span class="font-mono text-[10px] text-gray-400">{{ sess.username }}</span>
+                  </div>
+                </div>
+                <div v-else class="text-xs text-gray-400 italic">
+                  No active social sessions logged in for this hardware profile yet.
+                </div>
+              </div>
+            </div>
+
+            <div v-else class="text-center py-4 bg-gray-50 dark:bg-gray-900/40 rounded-xl space-y-2">
+              <span class="text-xs text-gray-400 block">No digital persona bound to this profile.</span>
+              <router-link 
+                to="/affiliate/personas" 
+                class="inline-block px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold"
+              >
+                ⚡ Assign or Generate Persona
+              </router-link>
+            </div>
+          </div>
+
           <!-- SpyHub Host Node Technical Details -->
           <div class="bg-white dark:bg-gray-950 border border-gray-100 dark:border-gray-800/80 rounded-2xl p-6 shadow-sm space-y-4">
             <h3 class="text-base font-bold text-gray-900 dark:text-white border-b border-gray-100 dark:border-gray-800/80 pb-4">

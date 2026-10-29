@@ -100,8 +100,8 @@ const getStatusBadge = (status: string) => {
     <!-- Header Title & Action -->
     <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
       <div>
-        <h2 class="text-2xl font-bold text-gray-900 dark:text-white tracking-tight">Affiliate Marketing Accounts</h2>
-        <p class="text-sm text-gray-500 dark:text-gray-400">Manage ad accounts, balances, proxy status, and daily spends</p>
+        <h2 class="text-2xl font-bold text-gray-900 dark:text-white tracking-tight">Ads Accounts</h2>
+        <p class="text-sm text-gray-500 dark:text-gray-400">Manage commercial ad accounts, balances, proxy status, and daily spends</p>
       </div>
 
       <button 
@@ -109,7 +109,7 @@ const getStatusBadge = (status: string) => {
         class="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold text-sm shadow-md shadow-blue-500/20 transition-all shrink-0"
       >
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
-        + Add Account
+        + Add Ad Account
       </button>
     </div>
 
@@ -184,6 +184,8 @@ const getStatusBadge = (status: string) => {
               <th class="py-3 px-4">Platform</th>
               <th class="py-3 px-4">Account Name</th>
               <th class="py-3 px-4">Account ID</th>
+              <th class="py-3 px-4">Owner (Persona)</th>
+              <th class="py-3 px-4">Parent Social</th>
               <th class="py-3 px-4">Status</th>
               <th class="py-3 px-4">Balance</th>
               <th class="py-3 px-4">Daily Spend</th>
@@ -202,6 +204,26 @@ const getStatusBadge = (status: string) => {
               </td>
               <td class="py-3.5 px-4 font-mono text-xs text-gray-500">
                 {{ acc.accountId }}
+              </td>
+              <td class="py-3.5 px-4 text-xs">
+                <router-link 
+                  v-if="acc.personaName" 
+                  to="/affiliate/personas"
+                  class="font-semibold text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1"
+                >
+                  <span>👤</span>
+                  <span>{{ acc.personaName }}</span>
+                </router-link>
+                <span v-else class="text-gray-400 italic">Unassigned</span>
+              </td>
+              <td class="py-3.5 px-4 text-xs font-medium">
+                <span 
+                  v-if="acc.socialAccountName" 
+                  class="px-2 py-0.5 rounded-md font-mono text-[11px] bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300"
+                >
+                  {{ acc.socialAccountName }}
+                </span>
+                <span v-else class="text-gray-400 italic">—</span>
               </td>
               <td class="py-3.5 px-4">
                 <span class="px-2.5 py-1 rounded-full text-xs font-semibold capitalize" :class="getStatusBadge(acc.status)">

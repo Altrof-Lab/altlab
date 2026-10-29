@@ -1,0 +1,17 @@
+services:
+  altlab-db:
+    image: postgres:16-alpine
+    container_name: altlab-db
+    restart: unless-stopped
+    environment:
+      - POSTGRES_DB=altlab
+      - POSTGRES_USER=altlab
+      - POSTGRES_PASSWORD=altlab
+    ports:
+      - "5438:5432"
+    volumes:
+      - altlab-pgdata:/var/lib/postgresql/data
+
+volumes:
+  altlab-pgdata:
+    driver: local

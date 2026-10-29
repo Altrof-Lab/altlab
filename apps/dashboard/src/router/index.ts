@@ -10,6 +10,16 @@ const router = createRouter({
       component: HomeView,
     },
     {
+      path: '/affiliate/personas',
+      name: 'personas',
+      component: () => import('../views/affiliate/PersonasView.vue'),
+    },
+    {
+      path: '/affiliate/personas/:id',
+      name: 'persona-detail',
+      component: () => import('../views/affiliate/PersonaDetailView.vue'),
+    },
+    {
       path: '/affiliate/accounts',
       name: 'affiliate-accounts',
       component: () => import('../views/affiliate/AccountsView.vue'),

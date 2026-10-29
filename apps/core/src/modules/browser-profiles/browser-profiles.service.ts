@@ -2,13 +2,25 @@ import { Injectable } from '@nestjs/common';
 import { BrowserProfileDto, StealthAuditVerdictDto, StealthServiceResult, SpyhubNodeStatusDto, SpyhubNodeConfigDto, SingleNodeDataDto } from '@altlab/shared';
 import { BotforgeClient } from '../../integrations/botforge/botforge.client';
 import { SpyhubClient } from '../../integrations/spyhub/spyhub.client';
+import { PersonasService } from '../personas/personas.service';
 
 @Injectable()
 export class BrowserProfilesService {
   constructor(
     private readonly botforgeClient: BotforgeClient,
     private readonly spyhubClient: SpyhubClient,
+    private readonly personasService: PersonasService,
   ) {}
+
+  private async enrichWithPersona(profile: BrowserProfileDto): Promise<BrowserProfileDto> {
+    const persona = await this.personasService.getPersonaByProfileId(profile.profileId);
+    if (persona) {
+      profile.personaId = persona.id;
+      profile.personaName = `${persona.firstName} ${persona.lastName}`;
+    }
+    profile.activeSocialSessions = await this.personasService.getActiveSessionsForProfile(profile.profileId);
+    return profile;
+  }
 
   private fallbackProfiles: BrowserProfileDto[] = [
     {
@@ -41,6 +53,106 @@ export class BrowserProfilesService {
         cookiesCount: 412,
         sitesVisitedCount: 85,
         lastFarmedAt: '2026-09-18T18:30:00Z',
+        consentSuccessRate: 100,
+        totalDurationSeconds: 84,
+        recentVisits: [
+          {
+            siteUrl: 'swedbank.ee',
+            siteName: 'Swedbank Eesti',
+            category: 'finance',
+            cookieBannerText: 'Nõustun kõigi küpsistega',
+            dismissalLevel: 'Level 1 (Text)',
+            cookiesCaptured: 16,
+            durationSeconds: 5.4,
+            interactionSummary: 'Scroll (1200px) • 2 Pageviews',
+            status: 'COMPLETED',
+            visitedAt: '2026-09-18T18:29:45Z',
+          },
+          {
+            siteUrl: 'kaup24.ee',
+            siteName: 'Kaup24 E-Kaubandus',
+            category: 'ecommerce',
+            cookieBannerText: 'Luba kõik',
+            dismissalLevel: 'Level 1 (Text)',
+            cookiesCaptured: 24,
+            durationSeconds: 8.2,
+            interactionSummary: 'Product Catalog Browsing • 3 Items',
+            status: 'COMPLETED',
+            visitedAt: '2026-09-18T18:29:12Z',
+          },
+          {
+            siteUrl: 'telia.ee',
+            siteName: 'Telia Eesti',
+            category: 'telecom',
+            cookieBannerText: 'Nõustun kõigi küpsistega',
+            dismissalLevel: 'Level 1 (Text)',
+            cookiesCaptured: 18,
+            durationSeconds: 6.1,
+            interactionSummary: 'Homepage Viewport Warm • 4s dwell',
+            status: 'COMPLETED',
+            visitedAt: '2026-09-18T18:28:40Z',
+          },
+          {
+            siteUrl: 'if.ee',
+            siteName: 'If Kindlustus',
+            category: 'insurance',
+            cookieBannerText: 'I accept all',
+            dismissalLevel: 'Level 1 (Text)',
+            cookiesCaptured: 11,
+            durationSeconds: 4.8,
+            interactionSummary: 'Policy Calculator Dwell • Scroll 600px',
+            status: 'COMPLETED',
+            visitedAt: '2026-09-18T18:28:10Z',
+          },
+          {
+            siteUrl: 'booking.com',
+            siteName: 'Booking.com Travel',
+            category: 'travel',
+            cookieBannerText: 'Accept',
+            dismissalLevel: 'Level 2 (Selector)',
+            cookiesCaptured: 32,
+            durationSeconds: 9.5,
+            interactionSummary: 'Tallinn Hotel Search Warm • Scroll & Click',
+            status: 'COMPLETED',
+            visitedAt: '2026-09-18T18:27:30Z',
+          },
+          {
+            siteUrl: 'euronics.ee',
+            siteName: 'Euronics Elektroonika',
+            category: 'ecommerce',
+            cookieBannerText: 'Nõustun',
+            dismissalLevel: 'Level 1 (Text)',
+            cookiesCaptured: 19,
+            durationSeconds: 5.7,
+            interactionSummary: 'Category Filter Warm • 2 Clicks',
+            status: 'COMPLETED',
+            visitedAt: '2026-09-18T18:26:50Z',
+          },
+          {
+            siteUrl: 'lhv.ee',
+            siteName: 'LHV Pank',
+            category: 'finance',
+            cookieBannerText: 'Luban kõik küpsised',
+            dismissalLevel: 'Level 1 (Text)',
+            cookiesCaptured: 14,
+            durationSeconds: 4.2,
+            interactionSummary: 'Banking Portal Warm • 1 Pageview',
+            status: 'COMPLETED',
+            visitedAt: '2026-09-18T18:26:15Z',
+          },
+          {
+            siteUrl: 'tripadvisor.com',
+            siteName: 'Tripadvisor Reviews',
+            category: 'travel',
+            cookieBannerText: 'I Accept',
+            dismissalLevel: 'Level 2 (Selector)',
+            cookiesCaptured: 28,
+            durationSeconds: 7.6,
+            interactionSummary: 'Local Attractions View • Scroll 1800px',
+            status: 'COMPLETED',
+            visitedAt: '2026-09-18T18:25:35Z',
+          },
+        ],
       },
       createdAt: '2026-09-01T08:00:00Z',
     },
@@ -73,6 +185,46 @@ export class BrowserProfilesService {
         cookiesCount: 184,
         sitesVisitedCount: 32,
         lastFarmedAt: '2026-09-19T23:00:00Z',
+        consentSuccessRate: 100,
+        totalDurationSeconds: 45,
+        recentVisits: [
+          {
+            siteUrl: 'seb.ee',
+            siteName: 'SEB Pank',
+            category: 'finance',
+            cookieBannerText: 'Nõustun',
+            dismissalLevel: 'Level 1 (Text)',
+            cookiesCaptured: 15,
+            durationSeconds: 5.1,
+            interactionSummary: 'Homepage Dwell • Scroll 1100px',
+            status: 'COMPLETED',
+            visitedAt: '2026-09-19T22:59:10Z',
+          },
+          {
+            siteUrl: '1a.ee',
+            siteName: '1a.ee Tehnika',
+            category: 'ecommerce',
+            cookieBannerText: 'Nõustun kõigiga',
+            dismissalLevel: 'Level 1 (Text)',
+            cookiesCaptured: 22,
+            durationSeconds: 7.0,
+            interactionSummary: 'Search Electronics Warm',
+            status: 'COMPLETED',
+            visitedAt: '2026-09-19T22:58:30Z',
+          },
+          {
+            siteUrl: 'elisa.ee',
+            siteName: 'Elisa Eesti',
+            category: 'telecom',
+            cookieBannerText: 'Luban kõik',
+            dismissalLevel: 'Level 1 (Text)',
+            cookiesCaptured: 12,
+            durationSeconds: 3.9,
+            interactionSummary: 'Telecommunications Portal',
+            status: 'IN_PROGRESS',
+            visitedAt: '2026-09-19T22:58:00Z',
+          },
+        ],
       },
       createdAt: '2026-09-05T12:00:00Z',
     },
@@ -137,6 +289,9 @@ export class BrowserProfilesService {
           cookiesCount: summary.cookiesCount,
           sitesVisitedCount: summary.sitesVisitedCount,
           lastFarmedAt: existing?.cookieFarm?.lastFarmedAt || new Date().toISOString(),
+          recentVisits: existing?.cookieFarm?.recentVisits,
+          consentSuccessRate: existing?.cookieFarm?.consentSuccessRate || 100,
+          totalDurationSeconds: existing?.cookieFarm?.totalDurationSeconds || 84,
         } : existing?.cookieFarm,
         createdAt: p.createdAt || new Date().toISOString(),
       };
@@ -144,7 +299,7 @@ export class BrowserProfilesService {
 
     return {
       nodeStatus: res.status,
-      profiles,
+      profiles: await Promise.all(profiles.map((p) => this.enrichWithPersona(p))),
     };
   }
 
@@ -165,9 +320,6 @@ export class BrowserProfilesService {
   /**
    * Fetches and aggregates profiles across all configured SpyHub nodes (macOS + Windows).
    */
-  /**
-   * Fetches and aggregates profiles across all configured SpyHub nodes (macOS + Windows).
-   */
   async getProfiles(): Promise<BrowserProfileDto[]> {
     try {
       const liveSpyhubProfiles = await this.spyhubClient.getAllProfiles();
@@ -177,46 +329,51 @@ export class BrowserProfilesService {
         const summaries = await this.botforgeClient.getProfilesSummaryInfo(profileIds);
         const summaryMap = new Map(summaries.map((s) => [s.profileId, s]));
 
-        return liveSpyhubProfiles.map((p): BrowserProfileDto => {
-          const proxyIp = p.proxy?.host ? `${p.proxy.host}:${p.proxy.port || 8080}` : undefined;
-          const existing = this.fallbackProfiles.find((f) => f.profileId === p.id);
-          const summary = summaryMap.get(p.id);
+        return Promise.all(
+          liveSpyhubProfiles.map(async (p): Promise<BrowserProfileDto> => {
+            const proxyIp = p.proxy?.host ? `${p.proxy.host}:${p.proxy.port || 8080}` : undefined;
+            const existing = this.fallbackProfiles.find((f) => f.profileId === p.id);
+            const summary = summaryMap.get(p.id);
 
-          return {
-            profileId: p.id,
-            name: p.name,
-            browserType: p.browser || 'camoufox',
-            os: p.os || 'windows',
-            proxyIp: proxyIp || existing?.proxyIp,
-            running: p.isRunning || p.is_running || false,
-            nodeUrl: p.nodeUrl,
-            nodeName: p.nodeName,
-            linkedAccountId: existing?.linkedAccountId,
-            linkedAccountName: existing?.linkedAccountName,
-            stealthAudit: (summary && summary.overallStatus !== 'NOT_AUDITED') ? {
-              processInstanceId: existing?.stealthAudit?.processInstanceId || `bpmn-proc-${p.id.substring(0, 8)}`,
-              status: 'COMPLETED',
-              overallTrustScore: summary.overallTrustScore,
-              overallStatus: summary.overallStatus as any,
-              criticalFailureDetected: summary.overallStatus === 'FAILED',
-              lastAuditedAt: existing?.stealthAudit?.lastAuditedAt || new Date().toISOString(),
-              results: existing?.stealthAudit?.results || [],
-            } : (existing?.stealthAudit?.results?.length ? existing.stealthAudit : undefined),
-            cookieFarm: summary ? {
-              status: existing?.cookieFarm?.status || 'COMPLETED',
-              cookiesCount: summary.cookiesCount,
-              sitesVisitedCount: summary.sitesVisitedCount,
-              lastFarmedAt: existing?.cookieFarm?.lastFarmedAt || new Date().toISOString(),
-            } : existing?.cookieFarm,
-            createdAt: p.createdAt || new Date().toISOString(),
-          };
-        });
+            return this.enrichWithPersona({
+              profileId: p.id,
+              name: p.name,
+              browserType: p.browser || 'camoufox',
+              os: p.os || 'windows',
+              proxyIp: proxyIp || existing?.proxyIp,
+              running: p.isRunning || p.is_running || false,
+              nodeUrl: p.nodeUrl,
+              nodeName: p.nodeName,
+              linkedAccountId: existing?.linkedAccountId,
+              linkedAccountName: existing?.linkedAccountName,
+              stealthAudit: (summary && summary.overallStatus !== 'NOT_AUDITED') ? {
+                processInstanceId: existing?.stealthAudit?.processInstanceId || `bpmn-proc-${p.id.substring(0, 8)}`,
+                status: 'COMPLETED',
+                overallTrustScore: summary.overallTrustScore,
+                overallStatus: summary.overallStatus as any,
+                criticalFailureDetected: summary.overallStatus === 'FAILED',
+                lastAuditedAt: existing?.stealthAudit?.lastAuditedAt || new Date().toISOString(),
+                results: existing?.stealthAudit?.results || [],
+              } : (existing?.stealthAudit?.results?.length ? existing.stealthAudit : undefined),
+              cookieFarm: summary ? {
+                status: existing?.cookieFarm?.status || 'COMPLETED',
+                cookiesCount: summary.cookiesCount,
+                sitesVisitedCount: summary.sitesVisitedCount,
+                lastFarmedAt: existing?.cookieFarm?.lastFarmedAt || new Date().toISOString(),
+                recentVisits: existing?.cookieFarm?.recentVisits,
+                consentSuccessRate: existing?.cookieFarm?.consentSuccessRate || 100,
+                totalDurationSeconds: existing?.cookieFarm?.totalDurationSeconds || 84,
+              } : existing?.cookieFarm,
+              createdAt: p.createdAt || new Date().toISOString(),
+            });
+          })
+        );
       }
     } catch (err) {
       console.warn('[SpyHub Integration] Could not connect to SpyHub nodes. Using configured fallback profiles.');
     }
 
-    return this.fallbackProfiles;
+    return Promise.all(this.fallbackProfiles.map((p) => this.enrichWithPersona({ ...p })));
   }
 
   async getProfileById(id: string): Promise<BrowserProfileDto | undefined> {

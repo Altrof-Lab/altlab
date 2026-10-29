@@ -7,12 +7,12 @@ export class AffiliateController {
   constructor(private readonly affiliateService: AffiliateService) {}
 
   @Get()
-  getAccounts(): AffiliateAccountDto[] {
+  async getAccounts(): Promise<AffiliateAccountDto[]> {
     return this.affiliateService.getAccounts();
   }
 
   @Post()
-  createAccount(@Body() dto: CreateAffiliateAccountDto): AffiliateAccountDto {
+  async createAccount(@Body() dto: CreateAffiliateAccountDto): Promise<AffiliateAccountDto> {
     return this.affiliateService.createAccount(dto);
   }
 }
